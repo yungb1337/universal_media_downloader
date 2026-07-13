@@ -4,7 +4,7 @@ A lightweight, robust, and site-agnostic download manager powered by `yt-dlp` an
 
 ## Features
 
-- **1700+ Sites Supported**: Works universally on any platform supported by `yt-dlp` (YouTube, Vimeo, PornTrex, EPorner, NoodleMagazine, etc.).
+- **1700+ Sites Supported**: Works universally on any platform supported by `yt-dlp` (YouTube, Vimeo etc.).
 - **Smart Resolution Control**:
   - Caps downloads at **1080p** by default to save bandwidth.
   - Automatically falls back to the next highest available resolution (e.g., 720p, 480p) if 1080p is unavailable.

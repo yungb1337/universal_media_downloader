@@ -12,7 +12,13 @@ import threading
 from pathlib import Path
 
 
-BASE_DIR = Path(__file__).parent.parent
+def _find_base_dir() -> Path:
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent.parent
+
+
+BASE_DIR = _find_base_dir()
 
 
 class DownloadRunner:
@@ -53,12 +59,15 @@ class DownloadRunner:
 
     def _run(self):
         """Worker thread: spawn process, stream lines."""
-        python = sys.executable
-        script = str(BASE_DIR / "main.py")
-
+        if getattr(sys, 'frozen', False):
+            # Running as PyInstaller bundle — call ourselves with --run-engine flag
+            cmd = [sys.executable, "--run-engine"]
+        else:
+            # Normal Python — call main.py directly
+            cmd = [sys.executable, str(BASE_DIR / "main.py")]
         try:
             self._proc = subprocess.Popen(
-                [python, script],
+                cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,   # merge stderr into stdout
                 text=True,

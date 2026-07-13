@@ -1,11 +1,21 @@
 import os
+import sys
 import argparse
 from pathlib import Path
 from dotenv import load_dotenv
 
 
+def _find_base_dir() -> Path:
+    """Resolve the project root correctly in both normal and PyInstaller modes."""
+    if getattr(sys, 'frozen', False):
+        # Running as a PyInstaller bundle — use the dir that contains the .exe
+        return Path(sys.executable).parent
+    # Running as normal Python script
+    return Path(__file__).parent.parent
+
+
 # Load .env from project root
-_base_dir = Path(__file__).parent.parent
+_base_dir = _find_base_dir()
 load_dotenv(_base_dir / ".env")
 
 

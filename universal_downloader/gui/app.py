@@ -18,7 +18,14 @@ import customtkinter as ctk
 from gui.widgets import BrowseEntry, LogPanel, ToggleButton, COLORS
 from gui.runner import DownloadRunner
 
-BASE_DIR = Path(__file__).parent.parent
+
+def _find_base_dir() -> Path:
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent.parent
+
+
+BASE_DIR = _find_base_dir()
 ENV_FILE = BASE_DIR / ".env"
 
 

@@ -1,8 +1,13 @@
+import threading
 from pathlib import Path
 from typing import List
 
 from core.models import LinkEntry
 from utils.logger import logger
+
+# Serializes all mark_done() file writes so parallel download
+# threads don't corrupt links.txt with interleaved read-modify-writes.
+_mark_done_lock = threading.Lock()
 
 
 def parse_links(links_file: Path) -> List[LinkEntry]:
@@ -67,21 +72,25 @@ def mark_done(links_file: Path, line_number: int, url: str):
     """
     Marks a specific line in links.txt as [DONE] by prepending [DONE]-
     to the URL at the given line number.
+
+    Thread-safe: uses _mark_done_lock to prevent concurrent writes
+    from corrupting the file when running parallel downloads.
     """
-    try:
-        with open(links_file, "r", encoding="utf-8") as f:
-            lines = f.readlines()
+    with _mark_done_lock:
+        try:
+            with open(links_file, "r", encoding="utf-8") as f:
+                lines = f.readlines()
 
-        # line_number is 1-indexed
-        idx = line_number - 1
-        if 0 <= idx < len(lines):
-            original = lines[idx].strip()
-            # Only mark if not already marked
-            if not original.startswith("[DONE]"):
-                lines[idx] = f"[DONE]-{original}\n"
+            # line_number is 1-indexed
+            idx = line_number - 1
+            if 0 <= idx < len(lines):
+                original = lines[idx].strip()
+                # Only mark if not already marked
+                if not original.startswith("[DONE]"):
+                    lines[idx] = f"[DONE]-{original}\n"
 
-        with open(links_file, "w", encoding="utf-8") as f:
-            f.writelines(lines)
+            with open(links_file, "w", encoding="utf-8") as f:
+                f.writelines(lines)
 
-    except Exception as e:
-        logger.error(f"Failed to mark line {line_number} as done: {e}")
+        except Exception as e:
+            logger.error(f"Failed to mark line {line_number} as done: {e}")

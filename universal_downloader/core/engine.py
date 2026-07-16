@@ -4,7 +4,7 @@ from typing import List
 
 from core.models import LinkEntry, DownloadResult
 from core.parser import mark_done
-from backends.ytdlp_backend import YtDlpBackend
+from core.protocols import DownloadBackend
 from utils.config import config
 from utils.logger import logger
 from utils.helpers import format_duration, format_filesize
@@ -21,7 +21,7 @@ class DownloadEngine:
     - Prints a final summary report
     """
 
-    def __init__(self, backend: YtDlpBackend):
+    def __init__(self, backend: DownloadBackend):
         self.backend = backend
         self.results: List[DownloadResult] = []
 

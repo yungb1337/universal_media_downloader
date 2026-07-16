@@ -1,5 +1,25 @@
 import re
 import string
+import sys
+from pathlib import Path
+
+
+def find_base_dir() -> Path:
+    """
+    Resolve the project root directory.
+
+    Handles both normal Python execution and PyInstaller bundles.
+    This is the SINGLE source of truth — all modules should import
+    this instead of defining their own _find_base_dir().
+
+    When frozen (PyInstaller):  directory containing the .exe
+    When normal:                two levels up from this file (utils/ → project root)
+    """
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent.parent
+
+
 
 
 # Regex to find YouTube ID in filenames like "Title [abc12345678].mp4"

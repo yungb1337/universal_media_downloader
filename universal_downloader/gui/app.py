@@ -17,61 +17,12 @@ import customtkinter as ctk
 
 from gui.widgets import BrowseEntry, LogPanel, ToggleButton, COLORS
 from gui.runner import DownloadRunner
+from utils.helpers import find_base_dir
+from utils.config import read_env_file, write_env_file
 
 
-def _find_base_dir() -> Path:
-    if getattr(sys, 'frozen', False):
-        return Path(sys.executable).parent
-    return Path(__file__).parent.parent
-
-
-BASE_DIR = _find_base_dir()
+BASE_DIR = find_base_dir()
 ENV_FILE = BASE_DIR / ".env"
-
-
-# ── Helpers ────────────────────────────────────────────────────────────────────
-
-def _read_env() -> dict[str, str]:
-    """Parse .env into a dict, preserving comment lines."""
-    env = {}
-    if not ENV_FILE.exists():
-        return env
-    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if stripped and not stripped.startswith("#") and "=" in stripped:
-            key, _, val = stripped.partition("=")
-            env[key.strip()] = val.strip()
-    return env
-
-
-def _write_env(updates: dict[str, str]):
-    """
-    Write updated key=value pairs back to .env,
-    preserving comments and key order.
-    """
-    if not ENV_FILE.exists():
-        return
-
-    lines = ENV_FILE.read_text(encoding="utf-8").splitlines()
-    new_lines = []
-    updated = set()
-
-    for line in lines:
-        stripped = line.strip()
-        if stripped and not stripped.startswith("#") and "=" in stripped:
-            key = stripped.split("=", 1)[0].strip()
-            if key in updates:
-                new_lines.append(f"{key}={updates[key]}")
-                updated.add(key)
-                continue
-        new_lines.append(line)
-
-    # Append any keys that didn't exist yet
-    for key, val in updates.items():
-        if key not in updated:
-            new_lines.append(f"{key}={val}")
-
-    ENV_FILE.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
 
 # ── App ────────────────────────────────────────────────────────────────────────
@@ -249,7 +200,7 @@ class App(ctk.CTk):
 
     def _load_env(self):
         """Read .env and pre-fill all form fields."""
-        env = _read_env()
+        env = read_env_file(ENV_FILE)
 
         # Resolve relative paths from BASE_DIR
         def resolve(key, default=""):
@@ -275,7 +226,7 @@ class App(ctk.CTk):
 
     def _save_env(self):
         """Write current form values back to .env."""
-        _write_env({
+        write_env_file(ENV_FILE, {
             "LINKS_FILE":              self._links_entry.get() or "./links.txt",
             "DOWNLOAD_DIR":            self._dl_dir_entry.get() or "./downloads",
             "COOKIES_FILE":            self._cookies_entry.get(),

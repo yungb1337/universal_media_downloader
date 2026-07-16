@@ -4,18 +4,11 @@ import argparse
 from pathlib import Path
 from dotenv import load_dotenv
 
-
-def _find_base_dir() -> Path:
-    """Resolve the project root correctly in both normal and PyInstaller modes."""
-    if getattr(sys, 'frozen', False):
-        # Running as a PyInstaller bundle — use the dir that contains the .exe
-        return Path(sys.executable).parent
-    # Running as normal Python script
-    return Path(__file__).parent.parent
+from utils.helpers import find_base_dir
 
 
 # Load .env from project root
-_base_dir = _find_base_dir()
+_base_dir = find_base_dir()
 load_dotenv(_base_dir / ".env")
 
 
@@ -109,3 +102,63 @@ class Config:
 
 # Singleton
 config = Config()
+
+
+# ── .env file read/write utilities ────────────────────────────────────────────
+#
+# These are used by the GUI to read current values and write updated
+# settings back to .env before spawning the download subprocess.
+# Previously these lived as private functions inside gui/app.py,
+# duplicating the parsing logic.  Now there's a single implementation.
+# ──────────────────────────────────────────────────────────────────────────────
+
+def read_env_file(env_path: Path) -> dict[str, str]:
+    """
+    Parse a .env file into a dict, ignoring comments and blank lines.
+
+    This is a raw key=value parser (no shell expansion, no interpolation).
+    Used by the GUI to pre-fill form fields from the current .env.
+    """
+    env: dict[str, str] = {}
+    if not env_path.exists():
+        return env
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key, _, val = stripped.partition("=")
+            env[key.strip()] = val.strip()
+    return env
+
+
+def write_env_file(env_path: Path, updates: dict[str, str]):
+    """
+    Write updated key=value pairs back to a .env file,
+    preserving comments, blank lines, and key order.
+
+    Keys in ``updates`` that already exist in the file are replaced
+    in-place.  Keys that don't exist yet are appended at the end.
+    """
+    if not env_path.exists():
+        return
+
+    lines = env_path.read_text(encoding="utf-8").splitlines()
+    new_lines: list[str] = []
+    updated: set[str] = set()
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key = stripped.split("=", 1)[0].strip()
+            if key in updates:
+                new_lines.append(f"{key}={updates[key]}")
+                updated.add(key)
+                continue
+        new_lines.append(line)
+
+    # Append any keys that didn't exist yet
+    for key, val in updates.items():
+        if key not in updated:
+            new_lines.append(f"{key}={val}")
+
+    env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+

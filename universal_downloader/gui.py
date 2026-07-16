@@ -19,7 +19,12 @@ from pathlib import Path
 
 # Ensure the project root is on sys.path so all imports work
 # both when run directly and when bundled with PyInstaller.
-# When frozen, sys.executable dir IS the project root.
+#
+# NOTE: This bootstrapper deliberately does NOT import find_base_dir()
+# from utils.helpers — it must run BEFORE sys.path is set up, so no
+# project-internal imports are available yet.  gui.py is in the project
+# root (not in a subdirectory), so Path(__file__).parent is correct here
+# (vs .parent.parent in utils/helpers.py which is one level deeper).
 if getattr(sys, 'frozen', False):
     ROOT = Path(sys.executable).parent
 else:

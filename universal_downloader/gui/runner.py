@@ -11,14 +11,10 @@ import sys
 import threading
 from pathlib import Path
 
-
-def _find_base_dir() -> Path:
-    if getattr(sys, 'frozen', False):
-        return Path(sys.executable).parent
-    return Path(__file__).parent.parent
+from utils.helpers import find_base_dir
 
 
-BASE_DIR = _find_base_dir()
+BASE_DIR = find_base_dir()
 
 
 class DownloadRunner:

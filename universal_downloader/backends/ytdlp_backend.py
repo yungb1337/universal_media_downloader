@@ -1,6 +1,8 @@
 import os
 import time
 import traceback
+import json
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -15,42 +17,76 @@ from utils.helpers import sanitize_filename, extract_video_id
 
 
 class TqdmProgressHook:
-    """Maps yt-dlp progress callbacks into tqdm progress bars."""
+    """Maps yt-dlp progress callbacks into tqdm progress bars or GUI updates."""
 
     def __init__(self):
         self.pbar: Optional[tqdm] = None
         self.current_file = ""
+        self.is_gui = os.getenv("UNIVERSAL_DOWNLOADER_GUI") == "1"
 
     def __call__(self, d: dict):
         if d["status"] == "downloading":
             filename = d.get("filename", "")
+            basename = os.path.basename(filename)
+            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+            downloaded = d.get("downloaded_bytes", 0)
+
+            if self.is_gui:
+                progress_info = {
+                    "type": "progress",
+                    "filename": basename,
+                    "downloaded": downloaded,
+                    "total": total,
+                    "speed": d.get("speed"),
+                    "eta": d.get("eta"),
+                    "status": "downloading"
+                }
+                print(f"[PROGRESS] {json.dumps(progress_info)}", flush=True)
+                return
+
             if self.pbar is None or self.current_file != filename:
                 self.close()
                 self.current_file = filename
-                total = d.get("total_bytes") or d.get("total_bytes_estimate")
-                basename = os.path.basename(filename)
                 desc = f"↓ {basename[:40]}..." if len(basename) > 40 else f"↓ {basename}"
                 self.pbar = tqdm(
-                    total=total, unit="B", unit_scale=True,
+                    total=total or None, unit="B", unit_scale=True,
                     desc=desc, leave=False, ncols=100
                 )
 
-            downloaded = d.get("downloaded_bytes", 0)
-            if self.pbar.total is None:
-                new_total = d.get("total_bytes") or d.get("total_bytes_estimate")
-                if new_total:
-                    self.pbar.total = new_total
+            if self.pbar.total is None and total:
+                self.pbar.total = total
 
             self.pbar.n = downloaded
             self.pbar.refresh()
 
         elif d["status"] == "finished":
+            if self.is_gui:
+                filename = d.get("filename", "")
+                basename = os.path.basename(filename)
+                progress_info = {
+                    "type": "progress",
+                    "filename": basename,
+                    "status": "finished"
+                }
+                print(f"[PROGRESS] {json.dumps(progress_info)}", flush=True)
+                return
+
             if self.pbar:
                 self.pbar.n = self.pbar.total or d.get("downloaded_bytes", 0)
                 self.pbar.refresh()
             self.close()
 
         elif d["status"] == "error":
+            if self.is_gui:
+                filename = d.get("filename", "")
+                basename = os.path.basename(filename)
+                progress_info = {
+                    "type": "progress",
+                    "filename": basename,
+                    "status": "error"
+                }
+                print(f"[PROGRESS] {json.dumps(progress_info)}", flush=True)
+                return
             self.close()
 
     def close(self):

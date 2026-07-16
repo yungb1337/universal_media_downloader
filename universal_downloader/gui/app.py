@@ -46,6 +46,7 @@ class App(ctk.CTk):
 
         self._log_queue: queue.Queue = queue.Queue()
         self._runner: DownloadRunner | None = None
+        self._active_downloads = {}
 
         self._build_ui()
         self._load_env()
@@ -55,7 +56,7 @@ class App(ctk.CTk):
 
     def _build_ui(self):
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(3, weight=1)   # log panel expands
+        self.rowconfigure(4, weight=1)   # log panel expands
 
         # ── Header ──────────────────────────────────────────────────────────
         header = ctk.CTkFrame(self, fg_color=COLORS["panel"], corner_radius=0)
@@ -168,9 +169,33 @@ class App(ctk.CTk):
         )
         self._stop_btn.grid(row=0, column=1)
 
+        # ── Progress panel ──────────────────────────────────────────────────
+        self._progress_frame = ctk.CTkFrame(self, fg_color=COLORS["surface"], corner_radius=10)
+        self._progress_frame.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 10))
+        self._progress_frame.columnconfigure(0, weight=1)
+
+        self._progress_label = ctk.CTkLabel(
+            self._progress_frame,
+            text="Idle",
+            font=("Segoe UI", 12, "bold"),
+            text_color=COLORS["subtext"],
+            anchor="w",
+            justify="left",
+        )
+        self._progress_label.grid(row=0, column=0, padx=16, pady=(10, 4), sticky="w")
+
+        self._progress_bar = ctk.CTkProgressBar(
+            self._progress_frame,
+            fg_color=COLORS["bg"],
+            progress_color=COLORS["download"],
+            height=10,
+        )
+        self._progress_bar.grid(row=1, column=0, padx=16, pady=(0, 12), sticky="ew")
+        self._progress_bar.set(0)
+
         # ── Log panel ───────────────────────────────────────────────────────
         log_frame = ctk.CTkFrame(self, fg_color=COLORS["surface"], corner_radius=10)
-        log_frame.grid(row=3, column=0, sticky="nsew", padx=16, pady=(0, 14))
+        log_frame.grid(row=4, column=0, sticky="nsew", padx=16, pady=(0, 14))
         log_frame.rowconfigure(1, weight=1)
         log_frame.columnconfigure(0, weight=1)
 
@@ -247,6 +272,10 @@ class App(ctk.CTk):
         self._log.append("⚙️  Saving configuration...", tag="info")
         self._log.append("▶  Starting download session...", tag="download")
 
+        self._active_downloads = {}
+        self._progress_bar.set(0)
+        self._progress_label.configure(text="Preparing downloads...", text_color=COLORS["subtext"])
+
         self._start_btn.configure(state="disabled", text="⏳  Running...")
         self._stop_btn.configure(state="normal")
 
@@ -256,19 +285,25 @@ class App(ctk.CTk):
     def _on_stop(self):
         if self._runner:
             self._runner.stop()
+        self._active_downloads = {}
+        self._progress_bar.set(0)
+        self._progress_label.configure(text="Idle", text_color=COLORS["subtext"])
         self._reset_buttons()
 
     def _reset_buttons(self):
         self._start_btn.configure(state="normal", text="▶   START DOWNLOAD")
         self._stop_btn.configure(state="disabled")
 
-    # ── Log polling ────────────────────────────────────────────────────────────
+    # ── Log polling & Progress ──────────────────────────────────────────────────
 
     def _poll_logs(self):
         """Drain the log queue and refresh buttons — called every 100ms."""
         try:
             while True:
                 line, tag = self._log_queue.get_nowait()
+                if tag == "progress":
+                    self._update_progress(line)
+                    continue
                 self._log.append(line, tag=tag)
         except queue.Empty:
             pass
@@ -277,5 +312,81 @@ class App(ctk.CTk):
         if self._runner and not self._runner.running:
             if self._start_btn.cget("state") == "disabled":
                 self._reset_buttons()
+                self._active_downloads = {}
+                self._progress_bar.set(0)
+                self._progress_label.configure(text="Idle", text_color=COLORS["subtext"])
 
         self.after(100, self._poll_logs)
+
+    def _update_progress(self, data: dict):
+        """Update progress bar and status labels based on structured JSON progress."""
+        from utils.helpers import format_filesize, format_duration
+
+        filename = data.get("filename", "Unknown")
+        status = data.get("status")
+
+        if status in ("finished", "error"):
+            self._active_downloads.pop(filename, None)
+        elif status == "downloading":
+            self._active_downloads[filename] = {
+                "downloaded": data.get("downloaded", 0),
+                "total": data.get("total", 0),
+                "speed": data.get("speed"),
+                "eta": data.get("eta"),
+            }
+
+        # If no active downloads:
+        if not self._active_downloads:
+            if self._runner and self._runner.running:
+                self._progress_label.configure(text="Waiting for next download...", text_color=COLORS["subtext"])
+            else:
+                self._progress_label.configure(text="Idle", text_color=COLORS["subtext"])
+            self._progress_bar.set(0)
+            return
+
+        # Calculate totals
+        total_downloaded = 0
+        total_size = 0
+        total_speed = 0
+        valid_speeds = 0
+        etas = []
+
+        for item in self._active_downloads.values():
+            total_downloaded += item["downloaded"]
+            if item["total"] > 0:
+                total_size += item["total"]
+            
+            speed = item["speed"]
+            if speed is not None:
+                total_speed += speed
+                valid_speeds += 1
+
+            eta = item["eta"]
+            if eta is not None:
+                etas.append(eta)
+
+        # Progress fraction
+        if total_size > 0:
+            fraction = min(max(total_downloaded / total_size, 0.0), 1.0)
+        else:
+            fraction = 0.0
+
+        self._progress_bar.set(fraction)
+
+        # Status text
+        count = len(self._active_downloads)
+        speed_str = format_filesize(total_speed) + "/s" if valid_speeds > 0 else "connecting..."
+        eta_str = f"ETA: {format_duration(min(etas))}" if etas else ""
+
+        if count == 1:
+            # Show file-specific detail
+            fname = list(self._active_downloads.keys())[0]
+            file_percent = int(fraction * 100) if total_size > 0 else 0
+            display_name = fname[:40] + "..." if len(fname) > 40 else fname
+            status_text = f"Downloading: {display_name} ({file_percent}% of {format_filesize(total_size)} @ {speed_str})  {eta_str}"
+        else:
+            # Multi-file detail
+            batch_percent = int(fraction * 100)
+            status_text = f"Downloading {count} files ({batch_percent}% @ {speed_str})  {eta_str}"
+
+        self._progress_label.configure(text=status_text, text_color=COLORS["download"])

@@ -55,6 +55,11 @@ class DownloadRunner:
 
     def _run(self):
         """Worker thread: spawn process, stream lines."""
+        import os
+        import json
+        env = os.environ.copy()
+        env["UNIVERSAL_DOWNLOADER_GUI"] = "1"
+
         if getattr(sys, 'frozen', False):
             # Running as PyInstaller bundle — call ourselves with --run-engine flag
             cmd = [sys.executable, "--run-engine"]
@@ -71,12 +76,21 @@ class DownloadRunner:
                 encoding="utf-8",
                 errors="replace",
                 cwd=str(BASE_DIR),
+                env=env,
             )
 
             # Stream line by line
             for line in self._proc.stdout:
                 line = line.rstrip()
                 if not line:
+                    continue
+                if line.startswith("[PROGRESS]"):
+                    try:
+                        raw_json = line[len("[PROGRESS]"):].strip()
+                        data = json.loads(raw_json)
+                        self._put_line(data, tag="progress")
+                    except Exception:
+                        pass
                     continue
                 tag = self._classify(line)
                 self._put_line(line, tag=tag)

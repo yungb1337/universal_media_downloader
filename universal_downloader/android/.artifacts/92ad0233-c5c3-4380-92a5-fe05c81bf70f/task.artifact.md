@@ -1,3 +1,3 @@
-- [x] Enhance `NotificationHelper.kt` for detailed progress
-- [x] Update `DownloadService.kt` logic for byte-level notifications
-- [x] Verify notification appearance on device
+- [x] Implement FFmpeg fallback logic in `download_bridge.py`
+- [x] Add FFmpeg-specific friendly error in `DownloadEngine.kt`
+- [x] Verify fix by downloading a video

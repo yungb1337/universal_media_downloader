@@ -2,24 +2,28 @@ package com.universaldownloader.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,6 +44,7 @@ import com.universaldownloader.data.repository.DownloadSettings
 import com.universaldownloader.ui.components.DownloadItemCard
 import com.universaldownloader.ui.components.DownloadResultCard
 import com.universaldownloader.ui.components.LogPanel
+import com.universaldownloader.ui.components.PlaylistSelectionDialog
 import com.universaldownloader.ui.theme.Accent
 import com.universaldownloader.ui.theme.Background
 import com.universaldownloader.ui.theme.Border
@@ -60,6 +65,20 @@ fun HomeScreen(
 ) {
     val state by viewModel.sessionState.collectAsState()
     val linksText by viewModel.linksText.collectAsState()
+    val isAnalyzing by viewModel.isAnalyzing.collectAsState()
+    val showPlaylistDialog by viewModel.showPlaylistDialog.collectAsState()
+    val playlistEntries by viewModel.playlistEntries.collectAsState()
+
+    if (showPlaylistDialog) {
+        PlaylistSelectionDialog(
+            entries = playlistEntries,
+            onToggle = { viewModel.togglePlaylistEntry(it) },
+            onSelectAll = { viewModel.setAllPlaylistSelection(true) },
+            onDeselectAll = { viewModel.setAllPlaylistSelection(false) },
+            onConfirm = { viewModel.startDownload(settings) },
+            onDismiss = { viewModel.dismissPlaylistDialog() }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -141,51 +160,97 @@ fun HomeScreen(
                             shape = RoundedCornerShape(8.dp)
                         )
 
-                        // Action Buttons (Start / Stop)
+                        // Action Buttons (Start / Analyze / Stop)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Button(
                                 onClick = { viewModel.startDownload(settings) },
-                                enabled = !state.isRunning && linksText.isNotBlank(),
+                                enabled = !state.isRunning && linksText.isNotBlank() && !isAnalyzing,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Accent,
                                     disabledContainerColor = Panel
                                 ),
                                 shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp),
                                 modifier = Modifier
-                                        .weight(1f)
-                                        .height(48.dp)
+                                    .weight(1f)
+                                    .height(48.dp)
                             ) {
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = TextPrimary)
-                                    Text("Download", color = TextPrimary)
+                                    Icon(
+                                        Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        tint = TextPrimary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = "Download",
+                                        color = TextPrimary,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
                                 }
                             }
 
                             Button(
-                                onClick = { viewModel.stopDownload() },
-                                enabled = state.isRunning,
+                                onClick = { viewModel.analyzePlaylist(settings) },
+                                enabled = !state.isRunning && linksText.isNotBlank() && !isAnalyzing,
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Error,
+                                    containerColor = Surface,
                                     disabledContainerColor = Panel
                                 ),
                                 shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp),
                                 modifier = Modifier
-                                        .weight(1f)
-                                        .height(48.dp)
+                                    .weight(1f)
+                                    .height(48.dp)
                             ) {
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.Stop, contentDescription = null, tint = TextPrimary)
-                                    Text("Stop", color = TextPrimary)
+                                    if (isAnalyzing) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(18.dp),
+                                            color = Accent,
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Default.Search,
+                                            contentDescription = null,
+                                            tint = Accent,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Text(
+                                            text = "Analyze",
+                                            color = TextPrimary,
+                                            style = MaterialTheme.typography.labelLarge,
+                                            maxLines = 1,
+                                            softWrap = false
+                                        )
+                                    }
                                 }
+                            }
+
+                            IconButton(
+                                onClick = { viewModel.stopDownload() },
+                                enabled = state.isRunning,
+                                modifier = Modifier
+                                    .height(48.dp)
+                                    .padding(horizontal = 4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Stop,
+                                    contentDescription = "Stop",
+                                    tint = if (state.isRunning) Error else Panel
+                                )
                             }
                         }
                     }

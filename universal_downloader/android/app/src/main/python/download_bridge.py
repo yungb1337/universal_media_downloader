@@ -44,20 +44,21 @@ def extract_video_id(filename):
 def build_format_string(highest_res, audio_only):
     """
     Build yt-dlp format selection string.
-    Same logic as the desktop version, but prefers pre-merged formats
-    to reduce FFmpeg dependency on Android.
+    Prioritizes high-bitrate video and audio streams.
+    Falls back to pre-merged 'best' to avoid FFmpeg errors if possible.
     """
     if audio_only:
         return "bestaudio/best"
 
     if highest_res:
-        return "best/bestvideo+bestaudio"
+        # Prefer merging, but fallback to single-file 'best' if FFmpeg is missing
+        return "bestvideo+bestaudio/best"
 
-    # 1080p cap — prefer pre-merged, then split (needs FFmpeg for merge)
+    # 1080p cap — prefer best 1080p video + best audio, then pre-merged 1080p, then just 'best'
     return (
-        "best[height<=1080]"
-        "/bestvideo[height<=1080]+bestaudio"
+        "bestvideo[height<=1080]+bestaudio"
         "/bestvideo[height<=1080]"
+        "/best[height<=1080]"
         "/best"
     )
 
@@ -129,6 +130,7 @@ def build_ydl_opts(output_template, format_string, cookies_file=None,
         opts["merge_output_format"] = "mp4"
 
     if ffmpeg_path:
+        # On Android, the binary is renamed to libffmpeg.so
         opts["ffmpeg_location"] = ffmpeg_path
 
     # Audio-only: extract to MP3 320kbps (only if FFmpeg is available)
@@ -142,6 +144,18 @@ def build_ydl_opts(output_template, format_string, cookies_file=None,
     # Cookie file for bot bypass
     if cookies_file:
         opts["cookiefile"] = cookies_file
+        # Extra check for valid cookie file format to provide better errors
+        try:
+            with open(cookies_file, 'r') as f:
+                first_line = f.readline()
+                if not first_line.startswith("# Netscape") and not first_line.startswith("# HTTP"):
+                    progress_listener.onProgress(json.dumps({
+                        "type": "log",
+                        "message": "⚠️ Cookie file has invalid header: " + first_line.strip(),
+                        "tag": "warning"
+                    }))
+        except Exception:
+            pass
 
     return opts
 
@@ -194,6 +208,53 @@ def probe_url(url, cookies_file=None, max_retries=3):
         "error": last_error or "Unknown error during probe",
         "fatal": False,
     })
+
+
+def get_playlist_info(url, cookies_file=None):
+    """
+    Fetch metadata for all videos in a playlist (or a single video).
+    Uses extract_flat=True to be very fast.
+    """
+    opts = {
+        "extract_flat": True,
+        "quiet": True,
+        "no_warnings": True,
+    }
+    if cookies_file:
+        opts["cookiefile"] = cookies_file
+
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+
+            if not info:
+                return json.dumps({"success": False, "error": "No info found"})
+
+            # Check if it's a single video or a playlist
+            entries = []
+            if "entries" in info:
+                # It's a playlist
+                for entry in info["entries"]:
+                    if entry:
+                        entries.append({
+                            "url": entry.get("url") or entry.get("webpage_url"),
+                            "title": entry.get("title") or "Unknown Title"
+                        })
+            else:
+                # It's a single video
+                entries.append({
+                    "url": info.get("webpage_url") or url,
+                    "title": info.get("title") or "Unknown Title"
+                })
+
+            return json.dumps({
+                "success": True,
+                "entries": entries,
+                "playlist_title": info.get("title", "Selection")
+            })
+
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
 
 
 # ── Main download function (called from Kotlin via Chaquopy) ─────────────────
@@ -303,6 +364,17 @@ def download_url(url, output_dir, highest_res, audio_only,
 
         except Exception as e:
             last_error = str(e)
+
+            # Special handling for FFmpeg missing: retry with a single-file format
+            if ("ffmpeg" in last_error.lower() or "ffprobe" in last_error.lower()) and attempt == 1:
+                progress_listener.onProgress(json.dumps({
+                    "type": "log",
+                    "message": "⚠️ FFmpeg missing. Falling back to single-file format (720p)...",
+                    "tag": "warning"
+                }))
+                format_string = "best"
+                continue
+
             if attempt < max_retries:
                 time.sleep(2 ** attempt)
                 continue

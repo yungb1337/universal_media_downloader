@@ -21,9 +21,12 @@ object FileUtils {
      * Files here don't require runtime permissions on API 26+.
      */
     fun getDefaultDownloadDir(context: Context): File {
+        // Primary location: "Universal Downloader" folder in internal storage root
+        // Note: Modern Android restricts direct root access. 
+        // We use system Downloads as the most accessible "Default".
         val dir = File(
-            context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-            "UniversalDownloader"
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            "Universal Downloader"
         )
         if (!dir.exists()) dir.mkdirs()
         return dir
@@ -132,5 +135,72 @@ object FileUtils {
         return DocumentFile.fromTreeUri(context, uri)?.name 
             ?: DocumentFile.fromSingleUri(context, uri)?.name 
             ?: uri.path ?: uri.toString()
+    }
+
+    /**
+     * Format raw cookie string from WebView into Netscape format.
+     */
+    fun formatCookiesToNetscape(url: String, cookieString: String?): String {
+        if (cookieString.isNullOrBlank()) return ""
+        
+        val uri = Uri.parse(url)
+        var domain = uri.host ?: ""
+        
+        // Normalize domain for Netscape format: .example.com
+        if (domain.startsWith("www.")) {
+            domain = domain.substring(3) // Result: .youtube.com
+        } else if (!domain.startsWith(".") && domain.contains(".")) {
+            domain = ".$domain"
+        }
+        
+        val secureFlag = if (url.startsWith("https")) "TRUE" else "FALSE"
+        
+        val sb = StringBuilder()
+        // Standard Netscape header
+        sb.append("# Netscape HTTP Cookie File\n")
+        sb.append("# This file was automatically generated. Do not edit.\n\n")
+
+        cookieString.split(";").forEach { cookie ->
+            val trimmed = cookie.trim()
+            if (trimmed.isBlank()) return@forEach
+            
+            val parts = trimmed.split("=", limit = 2)
+            if (parts.size == 2) {
+                val name = parts[0]
+                val value = parts[1]
+                
+                // Column 1: Domain
+                // Column 2: Flag (Include subdomains)
+                // Column 3: Path
+                // Column 4: Secure flag
+                // Column 5: Expiration (Unix timestamp) - 2147483647 is Jan 2038
+                // Column 6: Name
+                // Column 7: Value
+                sb.append(domain).append("\t")
+                  .append("TRUE").append("\t")
+                  .append("/").append("\t")
+                  .append(secureFlag).append("\t")
+                  .append("2147483647").append("\t")
+                  .append(name).append("\t")
+                  .append(value).append("\n")
+            }
+        }
+        return sb.toString()
+    }
+
+    /**
+     * Save extracted cookies to a fixed internal file.
+     */
+    fun saveExtractedCookies(context: Context, content: String): File {
+        val dir = getCookiesDir(context)
+        val file = File(dir, "extracted_cookies.txt")
+        file.writeText(content, Charsets.UTF_8)
+        return file
+    }
+
+    private fun getCookiesDir(context: Context): File {
+        val dir = File(context.filesDir, "cookies")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
     }
 }

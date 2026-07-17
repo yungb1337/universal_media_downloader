@@ -91,7 +91,8 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
                 addLog("⚠️  Download cancelled", LogTag.WARNING)
                 throw e
             } catch (e: Exception) {
-                addLog("❌ Engine error: ${e.message}", LogTag.ERROR)
+                val friendlyError = toFriendlyError(e.message ?: "Unknown engine error")
+                addLog("❌ $friendlyError", LogTag.ERROR)
             } finally {
                 val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
                 printSummary(elapsed)
@@ -206,7 +207,8 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
                 addLog("⏭️  Already downloaded: ${result.title ?: result.url}", LogTag.INFO)
             } else {
                 addLog("❌ Failed: ${result.title ?: result.url}", LogTag.ERROR)
-                result.error?.let { addLog("   Error: $it", LogTag.ERROR) }
+                val friendlyError = toFriendlyError(result.error ?: "Unknown error")
+                addLog("   $friendlyError", LogTag.ERROR)
             }
         }
     }
@@ -277,11 +279,44 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
                     if (it.length > 45) it.take(42) + "..." else it
                 }
                 addLog("    Line ${r.lineNumber}: $display", LogTag.ERROR)
-                r.error?.let { addLog("      → $it", LogTag.ERROR) }
+                val friendlyError = toFriendlyError(r.error ?: "Unknown error")
+                addLog("      → $friendlyError", LogTag.ERROR)
             }
         }
 
         addLog("═".repeat(50), LogTag.INFO)
+    }
+
+    private fun toFriendlyError(rawError: String): String {
+        return when {
+            rawError.contains("Sign in to confirm you're not a bot", ignoreCase = true) ||
+            rawError.contains("confirm your age", ignoreCase = true) -> 
+                "Verification Required: Please go to Settings and 'Login to YouTube' to continue."
+            
+            rawError.contains("This video is private", ignoreCase = true) -> 
+                "Private Content: Please login in Settings to download your private videos."
+            
+            rawError.contains("403", ignoreCase = true) || 
+            rawError.contains("Forbidden", ignoreCase = true) -> 
+                "Access Denied: Your login session may have expired. Please re-extract cookies in Settings."
+            
+            rawError.contains("Unsupported URL", ignoreCase = true) ||
+            rawError.contains("no extractor", ignoreCase = true) ->
+                "Unsupported Site: The app doesn't know how to download from this website yet."
+                
+            rawError.contains("No space left on device", ignoreCase = true) ->
+                "Storage Full: Please clear some space on your phone to save the video."
+                
+            rawError.contains("ffmpeg is not installed", ignoreCase = true) ||
+            rawError.contains("ffprobe is not installed", ignoreCase = true) ->
+                "Quality Note: FFmpeg is missing. Downloading the best single-file version (usually 720p) instead."
+
+            rawError.contains("Unable to download webpage", ignoreCase = true) ||
+            rawError.contains("Failed to connect", ignoreCase = true) ->
+                "Connection Error: Please check your internet connection and try again."
+                
+            else -> "Error: $rawError"
+        }
     }
 
     /** Add a log entry to the session state. */

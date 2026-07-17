@@ -16,16 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -36,20 +27,25 @@ import com.universaldownloader.util.FileUtils
 import com.universaldownloader.ui.components.NumericField
 import com.universaldownloader.ui.components.PathField
 import com.universaldownloader.ui.components.SettingsToggle
+import com.universaldownloader.ui.components.LoginBrowserDialog
+import com.universaldownloader.ui.theme.Accent
 import com.universaldownloader.ui.theme.Background
 import com.universaldownloader.ui.theme.Surface
 import com.universaldownloader.ui.theme.TextPrimary
 import com.universaldownloader.ui.theme.TextSecondary
 import com.universaldownloader.ui.viewmodel.SettingsViewModel
+import com.universaldownloader.ui.viewmodel.DownloadViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
+    downloadViewModel: DownloadViewModel,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val settings by viewModel.settingsState.collectAsState()
+    val showBrowser by downloadViewModel.showLoginBrowser.collectAsState()
     val context = LocalContext.current
 
     // Directory picker for SAF target download directory
@@ -100,6 +96,17 @@ fun SettingsScreen(
         containerColor = Background,
         modifier = modifier
     ) { innerPadding ->
+        if (showBrowser) {
+            LoginBrowserDialog(
+                onDone = { url ->
+                    downloadViewModel.extractAndSaveCookies(url) { path ->
+                        viewModel.updateCookiesFile(path)
+                    }
+                },
+                onDismiss = { downloadViewModel.dismissLoginBrowser() }
+            )
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -168,20 +175,52 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Download folder (SAF)
+                    // Cookies Section
+                    Text(
+                        text = "Cookies Extraction",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Accent
+                    )
+                    
+                    Button(
+                        onClick = { downloadViewModel.openLoginBrowser() },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Accent),
+                        shape = MaterialTheme.shapes.small
+                    ) {
+                        Text("🔑 Login to YouTube / Extract Cookies", color = TextPrimary)
+                    }
+
                     PathField(
-                        label = "Download Folder",
+                        label = "Cookies File Path",
+                        value = settings.cookiesFile,
+                        onClick = { cookiesPickerLauncher.launch(arrayOf("text/plain")) },
+                        placeholder = "Select manually or use Login button"
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Download folder Section
+                    Text(
+                        text = "Download Location",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Accent
+                    )
+
+                    Button(
+                        onClick = { dirPickerLauncher.launch(null) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Surface),
+                        shape = MaterialTheme.shapes.small
+                    ) {
+                        Text("📂 Set Default Download Folder", color = TextPrimary)
+                    }
+
+                    PathField(
+                        label = "Current Folder Path",
                         value = settings.downloadDir,
                         onClick = { dirPickerLauncher.launch(null) },
                         placeholder = "App-specific external storage (Default)"
-                    )
-
-                    // Cookies File (SAF)
-                    PathField(
-                        label = "Cookies File",
-                        value = settings.cookiesFile,
-                        onClick = { cookiesPickerLauncher.launch(arrayOf("text/plain")) },
-                        placeholder = "Import cookies.txt (optional)"
                     )
                 }
             }

@@ -41,6 +41,7 @@ fun AppNavigation(
         composable(Screen.SETTINGS) {
             SettingsScreen(
                 viewModel = settingsViewModel,
+                downloadViewModel = downloadViewModel,
                 onNavigateBack = { navController.popBackStack() }
             )
         }

@@ -1,0 +1,4 @@
+- [ ] Implement runtime permission requests in `MainActivity.kt`
+- [ ] Add directory fallback logic in `DownloadViewModel.kt`
+- [ ] Improve directory handling and logging in `DownloadRepository.kt`
+- [ ] Verify deployment and permission popup

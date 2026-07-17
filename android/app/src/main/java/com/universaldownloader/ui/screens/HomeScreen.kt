@@ -1,6 +1,5 @@
 package com.universaldownloader.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -187,24 +186,26 @@ fun HomeScreen(
                                     contentColor = Background,
                                     disabledContainerColor = Panel
                                 ),
-                                shape = RoundedCornerShape(16.dp),
-                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(56.dp)
+                                    .height(48.dp)
                             ) {
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
                                         Icons.Default.PlayArrow,
                                         contentDescription = null,
-                                        modifier = Modifier.size(24.dp)
+                                        tint = TextPrimary,
+                                        modifier = Modifier.size(20.dp)
                                     )
                                     Text(
                                         text = "Download",
-                                        style = MaterialTheme.typography.titleSmall,
+                                        color = TextPrimary,
+                                        style = MaterialTheme.typography.labelLarge,
                                         maxLines = 1,
                                         softWrap = false
                                     )
@@ -216,23 +217,21 @@ fun HomeScreen(
                                 enabled = !state.isRunning && linksText.isNotBlank() && !isAnalyzing,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Surface,
-                                    contentColor = Accent,
                                     disabledContainerColor = Panel
                                 ),
-                                shape = RoundedCornerShape(16.dp),
-                                border = BorderStroke(1.dp, Accent.copy(alpha = 0.5f)),
-                                contentPadding = PaddingValues(horizontal = 12.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(56.dp)
+                                    .height(48.dp)
                             ) {
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     if (isAnalyzing) {
                                         CircularProgressIndicator(
-                                            modifier = Modifier.size(20.dp),
+                                            modifier = Modifier.size(18.dp),
                                             color = Accent,
                                             strokeWidth = 2.dp
                                         )
@@ -240,11 +239,13 @@ fun HomeScreen(
                                         Icon(
                                             Icons.Default.Search,
                                             contentDescription = null,
-                                            modifier = Modifier.size(24.dp)
+                                            tint = Accent,
+                                            modifier = Modifier.size(20.dp)
                                         )
                                         Text(
                                             text = "Analyze",
-                                            style = MaterialTheme.typography.titleSmall,
+                                            color = TextPrimary,
+                                            style = MaterialTheme.typography.labelLarge,
                                             maxLines = 1,
                                             softWrap = false
                                         )

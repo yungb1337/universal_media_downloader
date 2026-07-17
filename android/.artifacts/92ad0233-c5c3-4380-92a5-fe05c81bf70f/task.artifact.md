@@ -1,5 +1,7 @@
-- [ ] Implement `shouldCancel` flag for Python interop
-- [ ] Update `download_bridge.py` to check for cancellation
-- [ ] Add "Clear" (Cross) button to `HomeScreen.kt` URL field
-- [ ] Modernize Home Screen UI (buttons, cards, layout)
-- [ ] Verify functional stop and UI enhancements
+# Tasks - FFmpeg Integration
+
+- [x] Resolve Git conflicts in `PythonBridge.kt`
+- [x] Resolve Git conflicts in `HomeScreen.kt`
+- [x] Update `.gitignore` to allow `.so` files
+- [x] Verify build health
+- [x] Provide final instructions for binary placement

@@ -1,0 +1,3 @@
+- [x] Implement FFmpeg fallback logic in `download_bridge.py`
+- [x] Add FFmpeg-specific friendly error in `DownloadEngine.kt`
+- [x] Verify fix by downloading a video

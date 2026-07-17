@@ -1,4 +1,3 @@
-- [ ] Implement runtime permission requests in `MainActivity.kt`
-- [ ] Add directory fallback logic in `DownloadViewModel.kt`
-- [ ] Improve directory handling and logging in `DownloadRepository.kt`
-- [ ] Verify deployment and permission popup
+- [x] Enhance `NotificationHelper.kt` for detailed progress
+- [x] Update `DownloadService.kt` logic for byte-level notifications
+- [x] Verify notification appearance on device

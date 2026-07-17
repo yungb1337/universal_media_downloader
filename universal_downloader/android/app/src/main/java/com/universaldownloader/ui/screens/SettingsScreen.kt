@@ -32,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.universaldownloader.util.FileUtils
 import com.universaldownloader.ui.components.NumericField
 import com.universaldownloader.ui.components.PathField
 import com.universaldownloader.ui.components.SettingsToggle
@@ -61,8 +62,9 @@ fun SettingsScreen(
                     Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             context.contentResolver.takePersistableUriPermission(it, takeFlags)
 
-            // Convert Uri to path representation (or simply store the Uri string)
-            viewModel.updateDownloadDir(it.path ?: it.toString(), it.toString())
+            // Store the friendly name for display, and the URI for actual saving
+            val friendlyName = FileUtils.getDisplayName(context, it)
+            viewModel.updateDownloadDir(friendlyName, it.toString())
         }
     }
 

@@ -22,16 +22,8 @@ android {
         }
 
         ndk {
-            // Chaquopy requires explicit ABI filters
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
-        }
-
-        python {
-            version = "3.8"
-            pip {
-                // Core download engine — reused from the desktop project
-                install("yt-dlp")
-            }
+            // Python 3.14 ships 64-bit wheels only — drop armeabi-v7a and x86
+            abiFilters += listOf("arm64-v8a", "x86_64")
         }
     }
 
@@ -65,6 +57,28 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+}
+
+chaquopy {
+    defaultConfig {
+        // Must match the Python version on this machine (3.14.x)
+        version = "3.14"
+
+        // Explicitly point to the local Python 3.14 executable so Chaquopy
+        // doesn't fail auto-detection on Windows PATH configurations
+        buildPython("C:/Users/Asus/AppData/Local/Python/bin/python.exe")
+
+        // Disable pre-compilation to .pyc — avoids cross-version bytecode issues
+        pyc {
+            src = false
+            pip = false
+            stdlib = false
+        }
+
+        pip {
+            install("yt-dlp")
         }
     }
 }

@@ -10,6 +10,7 @@ import com.universaldownloader.data.model.DownloadSessionState
 import com.universaldownloader.data.repository.DownloadRepository
 import com.universaldownloader.data.repository.DownloadSettings
 import com.universaldownloader.service.DownloadService
+import com.universaldownloader.util.FileUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -64,6 +65,14 @@ class DownloadViewModel(
     }
 
     fun startDownload(settings: DownloadSettings) {
+        // Ensure we have a download directory
+        val effectiveSettings = if (settings.downloadDir.isBlank()) {
+            val defaultDir = FileUtils.getDefaultDownloadDir(context).absolutePath
+            settings.copy(downloadDir = defaultDir)
+        } else {
+            settings
+        }
+
         val intent = Intent(context, DownloadService::class.java)
         // Start foreground service
         context.startForegroundService(intent)
@@ -78,7 +87,7 @@ class DownloadViewModel(
                     attempts++
                 }
             }
-            downloadService?.startDownloading(_linksText.value, settings)
+            downloadService?.startDownloading(_linksText.value, effectiveSettings)
         }
     }
 

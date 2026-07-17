@@ -6,7 +6,13 @@ import com.universaldownloader.engine.DownloadEngine
 import com.universaldownloader.engine.LinkParser
 import com.universaldownloader.util.FileUtils
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import java.io.File
+import android.net.Uri
 
 /**
  * Repository coordinating downloads between the UI and engine layers.
@@ -37,14 +43,64 @@ class DownloadRepository(
         val links = LinkParser.parseLinks(linksText)
         if (links.isEmpty()) return
 
+        val isSaf = settings.downloadDirUri.startsWith("content://")
+        val finalTargetUri = if (isSaf) Uri.parse(settings.downloadDirUri) else null
+        
+        // Use a temporary directory for the actual download if using SAF
+        val effectiveDownloadDir = if (isSaf) {
+            val tempDir = File(context.cacheDir, "download_work")
+            if (!tempDir.exists()) tempDir.mkdirs()
+            tempDir.absolutePath
+        } else {
+            settings.downloadDir
+        }
+
         // Ensure download directory exists
-        FileUtils.ensureDirectoryExists(settings.downloadDir)
+        if (!FileUtils.ensureDirectoryExists(effectiveDownloadDir)) {
+            engine.addLog("❌ Failed to create download directory: $effectiveDownloadDir", com.universaldownloader.data.model.LogTag.ERROR)
+            return
+        }
 
         // Save links to internal file so mark_done can update it
         val linksFile = FileUtils.getDefaultLinksFile(context)
         linksFile.writeText(linksText, Charsets.UTF_8)
 
-        engine.run(links, settings, linksFile.absolutePath, scope)
+        val effectiveSettings = settings.copy(downloadDir = effectiveDownloadDir)
+
+        // Launch a collector to move files to SAF as they finish
+        var moveJob: kotlinx.coroutines.Job? = null
+        if (isSaf && finalTargetUri != null) {
+            moveJob = scope.launch {
+                var lastResultCount = 0
+                engine.sessionState.collectLatest { state ->
+                    if (state.results.size > lastResultCount) {
+                        val newResults = state.results.drop(lastResultCount)
+                        lastResultCount = state.results.size
+                        
+                        for (result in newResults) {
+                            if (result.success && !result.skipped && result.filePath != null) {
+                                val sourceFile = File(result.filePath)
+                                if (sourceFile.exists()) {
+                                    engine.addLog("📂 Moving to final folder: ${sourceFile.name}", com.universaldownloader.data.model.LogTag.INFO)
+                                    val moved = FileUtils.moveFileToSafUri(context, sourceFile, finalTargetUri)
+                                    if (moved) {
+                                        engine.addLog("✅ Moved: ${sourceFile.name}", com.universaldownloader.data.model.LogTag.SUCCESS)
+                                    } else {
+                                        engine.addLog("❌ Failed to move to target folder", com.universaldownloader.data.model.LogTag.ERROR)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        try {
+            engine.run(links, effectiveSettings, linksFile.absolutePath, scope)
+        } finally {
+            moveJob?.cancel()
+        }
     }
 
     /** Stop all active downloads. */

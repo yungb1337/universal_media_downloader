@@ -284,9 +284,8 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
         addLog("═".repeat(50), LogTag.INFO)
     }
 
-    // ── State helpers ───────────────────────────────────────────────────────
-
-    private fun addLog(message: String, tag: LogTag) {
+    /** Add a log entry to the session state. */
+    fun addLog(message: String, tag: LogTag) {
         val entry = LogEntry(message = message, tag = tag)
         _sessionState.update { it.copy(logEntries = it.logEntries + entry) }
     }

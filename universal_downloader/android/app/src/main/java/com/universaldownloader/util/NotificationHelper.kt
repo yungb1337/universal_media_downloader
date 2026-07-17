@@ -42,6 +42,8 @@ object NotificationHelper {
     fun buildProgressNotification(
         context: Context,
         title: String,
+        contentText: String,
+        subText: String,
         progress: Int
     ): Notification {
         val intent = Intent(context, MainActivity::class.java).apply {
@@ -54,9 +56,12 @@ object NotificationHelper {
 
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(title)
+            .setContentText(contentText)
+            .setSubText(subText)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setProgress(100, progress, progress == 0)
+            .setProgress(100, progress, progress <= 0)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setContentIntent(pendingIntent)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()

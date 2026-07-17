@@ -51,7 +51,7 @@ class DownloadService : Service() {
     fun startDownloading(linksText: String, settings: DownloadSettings) {
         // Start foreground immediately with an initial notification
         val notification = NotificationHelper.buildProgressNotification(
-            this, "Preparing downloads...", 0
+            this, "Preparing downloads...", "", "", 0
         )
         startForeground(NotificationHelper.NOTIFICATION_ID, notification)
 
@@ -101,13 +101,28 @@ class DownloadService : Service() {
     private fun updateNotification(state: DownloadSessionState) {
         if (!state.isRunning) return
 
-        val total = state.totalLinks
-        val processed = state.totalProcessed
-        val progress = if (total > 0) (processed * 100) / total else 0
-        val title = "Downloading: $processed/$total"
+        val totalProcessed = state.totalProcessed
+        val totalLinks = state.totalLinks
+        val subText = "${totalProcessed + 1}/$totalLinks"
+        
+        // Aggregate progress if multiple parallel downloads, or just take first
+        val activeDownloads = state.currentProgress.values
+        val currentDownload = activeDownloads.firstOrNull()
+        
+        val contentText = currentDownload?.filename ?: "Processing..."
+        
+        val progress = if (currentDownload != null && currentDownload.totalBytes > 0) {
+            ((currentDownload.downloadedBytes * 100) / currentDownload.totalBytes).toInt()
+        } else {
+            0
+        }
 
         val notification = NotificationHelper.buildProgressNotification(
-            this, title, progress
+            this, 
+            "Downloading...", 
+            contentText,
+            subText,
+            progress
         )
         NotificationHelper.updateNotification(this, notification)
     }

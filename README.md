@@ -109,3 +109,10 @@ When a download succeeds, the script will automatically edit `links.txt` to prep
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+
+## To create the gui out of the Universal Downloader.spec
+   run this command
+   ```bash
+   python -m PyInstaller --noconfirm "Universal Downloader.spec"
+   ```

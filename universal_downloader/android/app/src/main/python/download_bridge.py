@@ -19,6 +19,7 @@ import re
 from pathlib import Path
 
 import yt_dlp
+from com.universaldownloader.engine import PythonBridge
 
 
 # ── Utility functions (ported from utils/helpers.py) ─────────────────────────
@@ -75,6 +76,9 @@ def build_ydl_opts(output_template, format_string, cookies_file=None,
     """
 
     def progress_hook(d):
+        if PythonBridge.isCancelled():
+            raise RuntimeError("Download cancelled by user")
+
         if progress_listener is None:
             return
         try:

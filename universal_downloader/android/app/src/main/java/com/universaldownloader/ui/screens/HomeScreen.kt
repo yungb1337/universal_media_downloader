@@ -1,5 +1,6 @@
 package com.universaldownloader.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -112,7 +114,8 @@ fun HomeScreen(
             item {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Surface),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -142,14 +145,25 @@ fun HomeScreen(
                             value = linksText,
                             onValueChange = { viewModel.onLinksTextChange(it) },
                             modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(160.dp),
+                                .fillMaxWidth()
+                                .height(160.dp),
                             textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextPrimary),
                             placeholder = {
                                 Text(
-                                    "https://example.com/video1\nhttps://example.com/video2 MyCustomName",
+                                    "Paste links here...",
                                     color = TextSecondary.copy(alpha = 0.5f)
                                 )
+                            },
+                            trailingIcon = {
+                                if (linksText.isNotEmpty()) {
+                                    IconButton(onClick = { viewModel.onLinksTextChange("") }) {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "Clear all",
+                                            tint = Accent.copy(alpha = 0.8f)
+                                        )
+                                    }
+                                }
                             },
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = Accent,
@@ -157,7 +171,7 @@ fun HomeScreen(
                                 focusedContainerColor = Background,
                                 unfocusedContainerColor = Background,
                             ),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(16.dp)
                         )
 
                         // Action Buttons (Start / Analyze / Stop)
@@ -170,28 +184,27 @@ fun HomeScreen(
                                 enabled = !state.isRunning && linksText.isNotBlank() && !isAnalyzing,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Accent,
+                                    contentColor = Background,
                                     disabledContainerColor = Panel
                                 ),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                contentPadding = PaddingValues(horizontal = 16.dp),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(48.dp)
+                                    .height(56.dp)
                             ) {
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
                                         Icons.Default.PlayArrow,
                                         contentDescription = null,
-                                        tint = TextPrimary,
-                                        modifier = Modifier.size(20.dp)
+                                        modifier = Modifier.size(24.dp)
                                     )
                                     Text(
                                         text = "Download",
-                                        color = TextPrimary,
-                                        style = MaterialTheme.typography.labelLarge,
+                                        style = MaterialTheme.typography.titleSmall,
                                         maxLines = 1,
                                         softWrap = false
                                     )
@@ -203,21 +216,23 @@ fun HomeScreen(
                                 enabled = !state.isRunning && linksText.isNotBlank() && !isAnalyzing,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Surface,
+                                    contentColor = Accent,
                                     disabledContainerColor = Panel
                                 ),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(1.dp, Accent.copy(alpha = 0.5f)),
+                                contentPadding = PaddingValues(horizontal = 12.dp),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(48.dp)
+                                    .height(56.dp)
                             ) {
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     if (isAnalyzing) {
                                         CircularProgressIndicator(
-                                            modifier = Modifier.size(18.dp),
+                                            modifier = Modifier.size(20.dp),
                                             color = Accent,
                                             strokeWidth = 2.dp
                                         )
@@ -225,13 +240,11 @@ fun HomeScreen(
                                         Icon(
                                             Icons.Default.Search,
                                             contentDescription = null,
-                                            tint = Accent,
-                                            modifier = Modifier.size(20.dp)
+                                            modifier = Modifier.size(24.dp)
                                         )
                                         Text(
                                             text = "Analyze",
-                                            color = TextPrimary,
-                                            style = MaterialTheme.typography.labelLarge,
+                                            style = MaterialTheme.typography.titleSmall,
                                             maxLines = 1,
                                             softWrap = false
                                         )

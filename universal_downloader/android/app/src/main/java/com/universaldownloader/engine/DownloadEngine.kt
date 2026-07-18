@@ -103,8 +103,8 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
         downloadJob?.join()
     }
 
-    /** Cancel all active downloads. */
     fun cancel() {
+        PythonBridge.setCancel(true)
         downloadJob?.cancel()
         _sessionState.update { it.copy(isRunning = false) }
         addLog("⏹  Download stopped by user.", LogTag.WARNING)

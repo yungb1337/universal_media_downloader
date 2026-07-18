@@ -1,3 +1,5 @@
-- [x] Implement FFmpeg fallback logic in `download_bridge.py`
-- [x] Add FFmpeg-specific friendly error in `DownloadEngine.kt`
-- [x] Verify fix by downloading a video
+- [ ] Implement `shouldCancel` flag for Python interop
+- [ ] Update `download_bridge.py` to check for cancellation
+- [ ] Add "Clear" (Cross) button to `HomeScreen.kt` URL field
+- [ ] Modernize Home Screen UI (buttons, cards, layout)
+- [ ] Verify functional stop and UI enhancements

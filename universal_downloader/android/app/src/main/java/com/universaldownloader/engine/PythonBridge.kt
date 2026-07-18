@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Bridge between Kotlin and the Python yt-dlp backend.
@@ -17,6 +18,20 @@ import java.io.File
  * The Python bridge preserves all the download logic from ytdlp_backend.py.
  */
 class PythonBridge {
+
+    companion object {
+        private val _shouldCancel = AtomicBoolean(false)
+
+        @JvmStatic
+        fun setCancel(cancel: Boolean) {
+            _shouldCancel.set(cancel)
+        }
+
+        @JvmStatic
+        fun isCancelled(): Boolean {
+            return _shouldCancel.get()
+        }
+    }
 
     private val python: Python by lazy { Python.getInstance() }
     private val bridge: PyObject by lazy { python.getModule("download_bridge") }
@@ -50,7 +65,7 @@ class PythonBridge {
         customName: String? = null,
         onProgress: ((String) -> Unit)? = null
     ): DownloadResult = withContext(Dispatchers.IO) {
-
+        setCancel(false)
         val ffmpegPath = getFFmpegPath()
 
         val listener = onProgress?.let { callback ->

@@ -27,8 +27,8 @@ RUN mkdir -p downloads && chmod 777 downloads
 ENV PORT=7860
 ENV DOWNLOAD_DIR=downloads
 
-# Expose port 7860 (Hugging Face Spaces default port)
+# Expose port (default for HF, Render overrides this)
 EXPOSE 7860
 
-# Run FastAPI app using Uvicorn
-CMD ["uvicorn", "web.app:app", "--host", "0.0.0.0", "--port", "7860"]
+# Run FastAPI app using Uvicorn on a dynamic port
+CMD ["sh", "-c", "uvicorn web.app:app --host 0.0.0.0 --port ${PORT:-7860}"]

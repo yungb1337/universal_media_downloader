@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Universal Downloader — Free Online Web App</title>
+  <link rel="shortcut icon" href="https://img.icons8.com/neon/96/download.png" type="image/x-icon">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
+    :root {
+      --bg-color: #08080f;
+      --panel-bg: rgba(18, 18, 28, 0.7);
+      --card-bg: rgba(26, 26, 38, 0.6);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-glow: rgba(231, 76, 60, 0.4);
+      --accent-color: #e74c3c;
+      --accent-hover: #c0392b;
+      --accent-glow: rgba(231, 76, 60, 0.25);
+      --text-primary: #ffffff;
+      --text-secondary: #9aa0b3;
+      --success-color: #2ecc71;
+      --success-hover: #27ae60;
+      --success-glow: rgba(46, 204, 113, 0.2);
+      --font-family: 'Outfit', sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-family);
+      background: radial-gradient(circle at 50% 30%, #1c1a2f 0%, var(--bg-color) 70%);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+      overflow-y: auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 35px;
+      animation: fadeInDown 0.8s ease;
+    }
+
+    header h1 {
+      font-size: 2.8rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #ffffff 40%, #e74c3c 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    header p {
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+      font-weight: 300;
+    }
+
+    .main-container {
+      width: 100%;
+      max-width: 720px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 35px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+      margin-bottom: 30px;
+      animation: fadeInUp 0.8s ease;
+    }
+
+    .input-group {
+      margin-bottom: 25px;
+      position: relative;
+    }
+
+    .input-group label {
+      display: block;
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .url-input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .url-input {
+      width: 100%;
+      background: rgba(10, 10, 15, 0.65);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 16px 20px;
+      color: var(--text-primary);
+      font-family: var(--font-family);
+      font-size: 1.05rem;
+      outline: none;
+      transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .url-input:focus {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 15px var(--accent-glow), inset 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .options-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 30px;
+    }
+
+    .toggle-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      user-select: none;
+    }
+
+    .toggle-card:hover {
+      border-color: rgba(255, 255, 255, 0.15);
+      background: rgba(36, 36, 52, 0.6);
+    }
+
+    .toggle-info {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .toggle-label {
+      font-weight: 600;
+      font-size: 1rem;
+      color: var(--text-primary);
+    }
+
+    .toggle-desc {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+      pointer-events: none;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(255, 255, 255, 0.1);
+      transition: .3s;
+      border-radius: 24px;
+      border: 1px solid var(--border-color);
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: var(--accent-color);
+      border-color: transparent;
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(20px);
+    }
+
+    .btn-submit {
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent-color) 0%, #d35400 100%);
+      border: none;
+      border-radius: 12px;
+      padding: 16px;
+      color: white;
+      font-family: var(--font-family);
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .btn-submit:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(231, 76, 60, 0.45);
+    }
+
+    .btn-submit:active {
+      transform: translateY(0);
+    }
+
+    /* Active Tasks Section */
+    .tasks-section {
+      width: 100%;
+      max-width: 720px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      animation: fadeInUp 0.9s ease;
+    }
+
+    .tasks-header {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .task-card {
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+      animation: slideIn 0.4s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .task-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .task-title {
+      font-weight: 600;
+      font-size: 1.05rem;
+      color: var(--text-primary);
+      line-height: 1.4;
+      flex-grow: 1;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .task-badge {
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    .badge-pending { background: rgba(241, 196, 15, 0.15); color: #f1c40f; }
+    .badge-downloading { background: rgba(52, 152, 219, 0.15); color: #3498db; }
+    .badge-processing { background: rgba(155, 89, 182, 0.15); color: #9b59b6; }
+    .badge-completed { background: rgba(46, 204, 113, 0.15); color: #2ecc71; }
+    .badge-failed { background: rgba(231, 76, 60, 0.15); color: #e74c3c; }
+
+    .progress-container {
+      width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-color) 0%, #e67e22 100%);
+      width: 0%;
+      transition: width 0.3s ease;
+      border-radius: 4px;
+    }
+
+    .progress-bar.success {
+      background: linear-gradient(90deg, #2ecc71 0%, #27ae60 100%);
+    }
+
+    .task-details {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .task-stats {
+      display: flex;
+      gap: 16px;
+    }
+
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .btn-download {
+      background: linear-gradient(135deg, var(--success-color) 0%, #27ae60 100%);
+      border: none;
+      border-radius: 8px;
+      padding: 10px 16px;
+      color: white;
+      font-family: var(--font-family);
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 10px var(--success-glow);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-download:hover {
+      transform: translateY(-1.5px);
+      box-shadow: 0 6px 14px rgba(46, 204, 113, 0.35);
+    }
+
+    .task-error {
+      color: #e74c3c;
+      font-size: 0.85rem;
+      margin-top: 4px;
+      background: rgba(231, 76, 60, 0.08);
+      padding: 10px 14px;
+      border-radius: 8px;
+      border-left: 3px solid var(--accent-color);
+      line-height: 1.4;
+    }
+
+    /* Footer */
+    footer {
+      margin-top: auto;
+      padding: 30px 10px 10px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      text-align: center;
+      font-weight: 300;
+    }
+
+    footer a {
+      color: var(--accent-color);
+      text-decoration: none;
+      font-weight: 400;
+    }
+
+    /* Keyframes */
+    @keyframes fadeInDown {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    /* Mobile Responsive styling */
+    @media (max-width: 600px) {
+      .main-container { padding: 20px; }
+      .options-grid { grid-template-columns: 1fr; gap: 12px; }
+      header h1 { font-size: 2.1rem; }
+      .btn-submit { font-size: 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>🌐 Universal Downloader</h1>
+    <p>Fast, robust, and site-agnostic downloader powered by Python</p>
+  </header>
+
+  <main class="main-container">
+    <div class="input-group">
+      <label for="url-input">Enter Media URL</label>
+      <div class="url-input-wrapper">
+        <input 
+          type="text" 
+          id="url-input" 
+          class="url-input" 
+          placeholder="https://www.youtube.com/watch?v=..." 
+          autocomplete="off"
+        >
+      </div>
+    </div>
+
+    <div class="options-grid">
+      <!-- Audio Only Toggle -->
+      <div class="toggle-card" onclick="toggleSwitch('audio-only')">
+        <div class="toggle-info">
+          <div class="toggle-label">Extract Audio</div>
+          <div class="toggle-desc">Download as 320kbps MP3</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="audio-only">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- Resolution Toggle -->
+      <div class="toggle-card" onclick="toggleSwitch('highest-res')">
+        <div class="toggle-info">
+          <div class="toggle-label">Highest Resolution</div>
+          <div class="toggle-desc">Bypass 1080p Cap (2K/4K/8K)</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="highest-res">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <button class="btn-submit" id="btn-start" onclick="submitDownload()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M8 5v14l11-7z"/>
+      </svg>
+      START DOWNLOAD
+    </button>
+  </main>
+
+  <!-- Active Tasks Container -->
+  <section class="tasks-section" id="tasks-container" style="display: none;">
+    <div class="tasks-header">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="8" y1="6" x2="21" y2="6"></line>
+        <line x1="8" y1="12" x2="21" y2="12"></line>
+        <line x1="8" y1="18" x2="21" y2="18"></line>
+        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+      </svg>
+      Downloads list
+    </div>
+    <div id="tasks-list"></div>
+  </section>
+
+  <footer>
+    <p>Powered by yt-dlp & FastAPI. Bypasses Cloudflare & SSL errors. Hosted on Hugging Face Spaces.</p>
+  </footer>
+
+  <script>
+    // Handle toggle card clicks
+    function toggleSwitch(id) {
+      const checkbox = document.getElementById(id);
+      checkbox.checked = !checkbox.checked;
+    }
+
+    // List of active task tracking intervals
+    const activeIntervals = {};
+
+    async function submitDownload() {
+      const urlInput = document.getElementById('url-input');
+      const url = urlInput.value.trim();
+
+      if (!url) {
+        alert('Please enter a valid media URL');
+        return;
+      }
+
+      const audioOnly = document.getElementById('audio-only').checked;
+      const highestRes = document.getElementById('highest-res').checked;
+      const btnStart = document.getElementById('btn-start');
+
+      // UI Feedback
+      btnStart.disabled = true;
+      btnStart.style.opacity = '0.7';
+      btnStart.innerText = 'Initializing...';
+
+      try {
+        const response = await fetch('/api/download', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: url,
+            audio_only: audioOnly,
+            highest_res: highestRes
+          })
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.detail || 'Failed to start download');
+        }
+
+        const data = await response.json();
+        
+        // Show tasks list section
+        document.getElementById('tasks-container').style.display = 'flex';
+        
+        // Create dynamic task card
+        createTaskCard(data.task_id, url, audioOnly);
+        
+        // Clear input field
+        urlInput.value = '';
+
+        // Start polling status
+        trackTaskStatus(data.task_id);
+
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        btnStart.disabled = false;
+        btnStart.style.opacity = '1';
+        btnStart.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> START DOWNLOAD`;
+      }
+    }
+
+    function createTaskCard(taskId, url, isAudio) {
+      const tasksList = document.getElementById('tasks-list');
+      const cleanUrl = url.length > 55 ? url.substring(0, 55) + '...' : url;
+      
+      const cardHtml = `
+        <div class="task-card" id="task-${taskId}">
+          <div class="task-header">
+            <div class="task-title" id="title-${taskId}">${cleanUrl}</div>
+            <span class="task-badge badge-pending" id="badge-${taskId}">Pending</span>
+          </div>
+          
+          <div class="progress-container">
+            <div class="progress-bar" id="progress-${taskId}"></div>
+          </div>
+          
+          <div class="task-details">
+            <span id="speed-eta-${taskId}">Initializing metadata...</span>
+            <div id="action-${taskId}"></div>
+          </div>
+          <div id="error-${taskId}" class="task-error" style="display: none;"></div>
+        </div>
+      `;
+      
+      // Prepend the new card to list
+      tasksList.insertAdjacentHTML('afterbegin', cardHtml);
+    }
+
+    function trackTaskStatus(taskId) {
+      // Poll every 1.5 seconds
+      activeIntervals[taskId] = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/status/${taskId}`);
+          if (!res.ok) throw new Error('Task status fetch failed');
+          
+          const task = await res.json();
+          updateTaskUI(task);
+
+          // Stop polling if completed or failed
+          if (task.status === 'completed' || task.status === 'failed') {
+            clearInterval(activeIntervals[taskId]);
+            delete activeIntervals[taskId];
+          }
+
+        } catch (err) {
+          console.error('Error tracking task:', err);
+        }
+      }, 1500);
+    }
+
+    function updateTaskUI(task) {
+      const taskId = task.id;
+      const card = document.getElementById(`task-${taskId}`);
+      if (!card) return;
+
+      const badge = document.getElementById(`badge-${taskId}`);
+      const progressBar = document.getElementById(`progress-${taskId}`);
+      const speedEtaText = document.getElementById(`speed-eta-${taskId}`);
+      const actionContainer = document.getElementById(`action-${taskId}`);
+      const titleContainer = document.getElementById(`title-${taskId}`);
+      const errorContainer = document.getElementById(`error-${taskId}`);
+
+      // Update Title once backend retrieves it from metadata
+      if (task.title && task.title !== 'Querying Metadata...') {
+        titleContainer.innerText = task.title;
+        titleContainer.title = task.title;
+      }
+
+      // Update badge text and style class
+      badge.innerText = task.status;
+      badge.className = `task-badge badge-${task.status}`;
+
+      // Update progress bar
+      progressBar.style.width = `${task.progress}%`;
+
+      if (task.status === 'downloading') {
+        speedEtaText.innerText = `Speed: ${task.speed} | ETA: ${task.eta} (${task.progress}%)`;
+      } else if (task.status === 'processing') {
+        progressBar.classList.add('success');
+        speedEtaText.innerText = `Merging streams and encoding... please wait.`;
+      } else if (task.status === 'completed') {
+        progressBar.style.width = '100%';
+        progressBar.classList.add('success');
+        speedEtaText.innerText = `Size: ${task.file_size} | Download ready`;
+        
+        // Show Download Button
+        actionContainer.innerHTML = `
+          <button class="btn-download" onclick="triggerFileDownload('${taskId}')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            GET FILE
+          </button>
+        `;
+      } else if (task.status === 'failed') {
+        speedEtaText.innerText = `Failed to download.`;
+        errorContainer.innerText = task.error || 'Unknown download error occurred.';
+        errorContainer.style.display = 'block';
+      }
+    }
+
+    function triggerFileDownload(taskId) {
+      // Triggers browser download by opening the download link
+      window.location.href = `/api/file/${taskId}`;
+      
+      // Once user triggers the file download, the backend schedules the temp folder for deletion.
+      // We can update the UI card action button to show that it is downloading / cleaned.
+      const actionContainer = document.getElementById(`action-${taskId}`);
+      actionContainer.innerHTML = `<span style="font-size: 0.8rem; color: var(--success-color); font-weight: 500;">✓ Download Initiated</span>`;
+    }
+  </script>
+</body>
+</html>

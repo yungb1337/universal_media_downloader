@@ -125,7 +125,7 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 16px;
-      margin-bottom: 30px;
+      margin-bottom: 25px;
     }
 
     .toggle-card {
@@ -211,6 +211,154 @@
       transform: translateX(20px);
     }
 
+    /* Advanced Settings Card styles */
+    .advanced-settings-details {
+      background: rgba(255, 255, 255, 0.015);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      margin-bottom: 25px;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .advanced-settings-details[open] {
+      background: rgba(255, 255, 255, 0.035);
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .advanced-settings-summary {
+      padding: 14px 20px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+
+    .advanced-settings-summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .summary-arrow {
+      font-size: 0.75rem;
+      transition: transform 0.3s ease;
+      color: var(--text-secondary);
+    }
+
+    .advanced-settings-details[open] .summary-arrow {
+      transform: rotate(90deg);
+    }
+
+    .advanced-settings-content {
+      padding: 0 20px 20px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      padding-top: 18px;
+    }
+
+    .setting-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .setting-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .setting-label {
+      font-weight: 500;
+      font-size: 0.95rem;
+      color: var(--text-primary);
+    }
+
+    .setting-desc {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+    }
+
+    .setting-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .setting-select, .setting-num-input {
+      background: #090910;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 8px 12px;
+      color: var(--text-primary);
+      font-family: var(--font-family);
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .setting-select:focus, .setting-num-input:focus {
+      border-color: var(--accent-color);
+    }
+
+    .cookie-upload-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+    }
+
+    .cookie-upload-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(0, 0, 0, 0.15);
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px dashed var(--border-color);
+    }
+
+    .cookie-upload-btn-label {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+
+    .cookie-upload-btn-label:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .cookie-status-text {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      max-width: 250px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .btn-clear-cookie {
+      background: transparent;
+      border: none;
+      color: var(--accent-color);
+      font-size: 0.8rem;
+      cursor: pointer;
+      font-weight: 600;
+      text-decoration: underline;
+    }
+
     .btn-submit {
       width: 100%;
       background: linear-gradient(135deg, var(--accent-color) 0%, #d35400 100%);
@@ -272,7 +420,32 @@
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
       animation: slideIn 0.4s ease;
       position: relative;
-      overflow: hidden;
+    }
+
+    .task-body-wrapper {
+      display: flex;
+      align-items: flex-start;
+      width: 100%;
+    }
+
+    .task-thumbnail {
+      width: 130px;
+      height: 75px;
+      object-fit: cover;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(0, 0, 0, 0.3);
+      flex-shrink: 0;
+      margin-right: 18px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    }
+
+    .task-content {
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0; /* allows text truncation */
     }
 
     .task-header {
@@ -294,6 +467,13 @@
       overflow: hidden;
     }
 
+    .task-header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
     .task-badge {
       font-size: 0.75rem;
       font-weight: 700;
@@ -304,11 +484,39 @@
       white-space: nowrap;
     }
 
+    .badge-queued { background: rgba(142, 68, 173, 0.15); color: #9b59b6; }
     .badge-pending { background: rgba(241, 196, 15, 0.15); color: #f1c40f; }
     .badge-downloading { background: rgba(52, 152, 219, 0.15); color: #3498db; }
+    .badge-paused { background: rgba(230, 126, 34, 0.15); color: #e67e22; }
     .badge-processing { background: rgba(155, 89, 182, 0.15); color: #9b59b6; }
     .badge-completed { background: rgba(46, 204, 113, 0.15); color: #2ecc71; }
     .badge-failed { background: rgba(231, 76, 60, 0.15); color: #e74c3c; }
+
+    .btn-cancel {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+      cursor: pointer;
+      transition: color 0.2s, transform 0.2s;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+    }
+
+    .btn-cancel:hover {
+      color: var(--accent-color);
+      transform: scale(1.15);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .task-views {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      font-weight: 300;
+    }
 
     .progress-container {
       width: 100%;
@@ -337,27 +545,59 @@
       align-items: center;
       font-size: 0.85rem;
       color: var(--text-secondary);
+      gap: 12px;
     }
 
-    .task-stats {
-      display: flex;
-      gap: 16px;
-    }
-
-    .stat-item {
+    .task-actions {
       display: flex;
       align-items: center;
-      gap: 5px;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .btn-icon {
+      border: none;
+      border-radius: 8px;
+      padding: 8px 14px;
+      color: white;
+      font-family: var(--font-family);
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-pause {
+      background: rgba(241, 196, 15, 0.12);
+      color: #f1c40f;
+      border: 1px solid rgba(241, 196, 15, 0.22);
+    }
+    .btn-pause:hover {
+      background: rgba(241, 196, 15, 0.22);
+      transform: translateY(-1px);
+    }
+
+    .btn-resume {
+      background: rgba(52, 152, 219, 0.12);
+      color: #3498db;
+      border: 1px solid rgba(52, 152, 219, 0.22);
+    }
+    .btn-resume:hover {
+      background: rgba(52, 152, 219, 0.22);
+      transform: translateY(-1px);
     }
 
     .btn-download {
       background: linear-gradient(135deg, var(--success-color) 0%, #27ae60 100%);
       border: none;
       border-radius: 8px;
-      padding: 10px 16px;
+      padding: 9px 15px;
       color: white;
       font-family: var(--font-family);
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       font-weight: 700;
       cursor: pointer;
       transition: all 0.2s ease;
@@ -421,6 +661,11 @@
       .options-grid { grid-template-columns: 1fr; gap: 12px; }
       header h1 { font-size: 2.1rem; }
       .btn-submit { font-size: 1rem; }
+      .task-body-wrapper { flex-direction: column; align-items: center; text-align: center; }
+      .task-thumbnail { margin-right: 0; margin-bottom: 15px; width: 100%; height: 120px; }
+      .task-header { flex-direction: column; align-items: center; gap: 6px; }
+      .task-header-right { margin-top: 4px; }
+      .task-details { flex-direction: column; gap: 10px; text-align: center; }
     }
   </style>
 </head>
@@ -471,6 +716,70 @@
       </div>
     </div>
 
+    <!-- Advanced Settings (Collapsible) -->
+    <details class="advanced-settings-details">
+      <summary class="advanced-settings-summary">
+        <span>⚙️ Advanced Settings (Concurrency & Cookies)</span>
+        <span class="summary-arrow">▶</span>
+      </summary>
+      <div class="advanced-settings-content">
+        <!-- Max Concurrency -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">Max Concurrent Downloads</span>
+            <span class="setting-desc">Number of active server-side workers</span>
+          </div>
+          <div class="setting-control">
+            <input 
+              type="number" 
+              id="max-concurrent" 
+              class="setting-num-input" 
+              min="1" 
+              max="10" 
+              value="2"
+              onchange="updateSettings()"
+            >
+          </div>
+        </div>
+        
+        <!-- Browser Cookies extraction -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">Extract Browser Cookies</span>
+            <span class="setting-desc">Read cookies from local browser profiles (when hosted locally)</span>
+          </div>
+          <div class="setting-control">
+            <select id="browser-cookies" class="setting-select">
+              <option value="none">None</option>
+              <option value="chrome">Chrome</option>
+              <option value="firefox">Firefox</option>
+              <option value="edge">Edge</option>
+              <option value="brave">Brave</option>
+              <option value="safari">Safari</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Cookies file upload -->
+        <div class="setting-row">
+          <div class="cookie-upload-container">
+            <div class="setting-info" style="margin-bottom: 6px;">
+              <span class="setting-label">Upload Cookie File (cookies.txt)</span>
+              <span class="setting-desc">Highly recommended for hosted environments (e.g. Hugging Face) to bypass bot protection</span>
+            </div>
+            <div class="cookie-upload-row">
+              <span class="cookie-status-text" id="cookie-status">No cookies.txt file uploaded</span>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <label for="cookies-upload" class="cookie-upload-btn-label">Browse File</label>
+                <input type="file" id="cookies-upload" accept=".txt" style="display: none;">
+                <button type="button" class="btn-clear-cookie" onclick="clearCookieFile()">Clear</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
+
     <button class="btn-submit" id="btn-start" onclick="submitDownload()">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
         <path d="M8 5v14l11-7z"/>
@@ -500,13 +809,62 @@
   </footer>
 
   <script>
-    // Handle toggle card clicks
+    let uploadedCookiesContent = null;
+
+    // Load initial settings and cookies.txt listener
+    window.addEventListener('DOMContentLoaded', () => {
+      fetchSettings();
+      
+      document.getElementById('cookies-upload').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          uploadedCookiesContent = evt.target.result;
+          document.getElementById('cookie-status').innerText = `✓ ${file.name} (${Math.round(file.size / 1024)} KB)`;
+          document.getElementById('cookie-status').style.color = 'var(--success-color)';
+        };
+        reader.readAsText(file);
+      });
+    });
+
     function toggleSwitch(id) {
       const checkbox = document.getElementById(id);
       checkbox.checked = !checkbox.checked;
     }
 
-    // List of active task tracking intervals
+    function clearCookieFile() {
+      uploadedCookiesContent = null;
+      document.getElementById('cookies-upload').value = '';
+      document.getElementById('cookie-status').innerText = 'No cookies.txt file uploaded';
+      document.getElementById('cookie-status').style.color = 'var(--text-secondary)';
+    }
+
+    async function fetchSettings() {
+      try {
+        const res = await fetch('/api/settings');
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('max-concurrent').value = data.max_concurrent;
+        }
+      } catch (err) {
+        console.error('Error fetching settings:', err);
+      }
+    }
+
+    async function updateSettings() {
+      const maxVal = parseInt(document.getElementById('max-concurrent').value) || 2;
+      try {
+        await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ max_concurrent: maxVal })
+        });
+      } catch (err) {
+        console.error('Error updating settings:', err);
+      }
+    }
+
     const activeIntervals = {};
 
     async function submitDownload() {
@@ -520,12 +878,13 @@
 
       const audioOnly = document.getElementById('audio-only').checked;
       const highestRes = document.getElementById('highest-res').checked;
+      const browserCookies = document.getElementById('browser-cookies').value;
       const btnStart = document.getElementById('btn-start');
 
       // UI Feedback
       btnStart.disabled = true;
       btnStart.style.opacity = '0.7';
-      btnStart.innerText = 'Initializing...';
+      btnStart.innerText = 'Submitting...';
 
       try {
         const response = await fetch('/api/download', {
@@ -536,7 +895,9 @@
           body: JSON.stringify({
             url: url,
             audio_only: audioOnly,
-            highest_res: highestRes
+            highest_res: highestRes,
+            cookies_from_browser: browserCookies === 'none' ? null : browserCookies,
+            cookies_file_content: uploadedCookiesContent
           })
         });
 
@@ -551,7 +912,7 @@
         document.getElementById('tasks-container').style.display = 'flex';
         
         // Create dynamic task card
-        createTaskCard(data.task_id, url, audioOnly);
+        createTaskCard(data.task_id, url);
         
         // Clear input field
         urlInput.value = '';
@@ -568,24 +929,43 @@
       }
     }
 
-    function createTaskCard(taskId, url, isAudio) {
+    function createTaskCard(taskId, url) {
       const tasksList = document.getElementById('tasks-list');
       const cleanUrl = url.length > 55 ? url.substring(0, 55) + '...' : url;
+      const defaultThumbnail = "https://img.icons8.com/neon/96/download.png";
       
       const cardHtml = `
         <div class="task-card" id="task-${taskId}">
-          <div class="task-header">
-            <div class="task-title" id="title-${taskId}">${cleanUrl}</div>
-            <span class="task-badge badge-pending" id="badge-${taskId}">Pending</span>
-          </div>
-          
-          <div class="progress-container">
-            <div class="progress-bar" id="progress-${taskId}"></div>
-          </div>
-          
-          <div class="task-details">
-            <span id="speed-eta-${taskId}">Initializing metadata...</span>
-            <div id="action-${taskId}"></div>
+          <div class="task-body-wrapper">
+            <img class="task-thumbnail" id="thumb-${taskId}" src="${defaultThumbnail}">
+            
+            <div class="task-content">
+              <div class="task-header">
+                <div class="task-title" id="title-${taskId}">${cleanUrl}</div>
+                <div class="task-header-right">
+                  <span class="task-badge badge-queued" id="badge-${taskId}">Queued</span>
+                  <button class="btn-cancel" onclick="cancelTask('${taskId}')" title="Cancel Download">✕</button>
+                </div>
+              </div>
+              
+              <div class="task-views" id="views-${taskId}">Waiting in queue...</div>
+              
+              <div class="progress-container">
+                <div class="progress-bar" id="progress-${taskId}"></div>
+              </div>
+              
+              <div class="task-details">
+                <span id="speed-eta-${taskId}">Waiting in queue...</span>
+                <div class="task-actions" id="action-${taskId}">
+                  <button class="btn-icon btn-pause" id="btn-pause-${taskId}" onclick="togglePauseTask('${taskId}')" title="Pause Download" style="display: none;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                    </svg>
+                    <span class="btn-text">Pause</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
           <div id="error-${taskId}" class="task-error" style="display: none;"></div>
         </div>
@@ -596,7 +976,6 @@
     }
 
     function trackTaskStatus(taskId) {
-      // Poll every 1.5 seconds
       activeIntervals[taskId] = setInterval(async () => {
         try {
           const res = await fetch(`/api/status/${taskId}`);
@@ -605,8 +984,8 @@
           const task = await res.json();
           updateTaskUI(task);
 
-          // Stop polling if completed or failed
-          if (task.status === 'completed' || task.status === 'failed') {
+          // Stop polling if completed, failed, or cancelled
+          if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') {
             clearInterval(activeIntervals[taskId]);
             delete activeIntervals[taskId];
           }
@@ -627,30 +1006,71 @@
       const speedEtaText = document.getElementById(`speed-eta-${taskId}`);
       const actionContainer = document.getElementById(`action-${taskId}`);
       const titleContainer = document.getElementById(`title-${taskId}`);
+      const viewsContainer = document.getElementById(`views-${taskId}`);
+      const thumbnailContainer = document.getElementById(`thumb-${taskId}`);
       const errorContainer = document.getElementById(`error-${taskId}`);
+      const pauseBtn = document.getElementById(`btn-pause-${taskId}`);
 
-      // Update Title once backend retrieves it from metadata
-      if (task.title && task.title !== 'Querying Metadata...') {
+      // Update Title & Views & Thumbnail
+      if (task.title && task.title !== 'Queued in download list...' && task.title !== 'Querying Metadata...') {
         titleContainer.innerText = task.title;
         titleContainer.title = task.title;
       }
+      if (task.views) {
+        viewsContainer.innerText = task.views;
+      }
+      if (task.thumbnail && thumbnailContainer.src !== task.thumbnail) {
+        thumbnailContainer.src = task.thumbnail;
+      }
 
-      // Update badge text and style class
+      // Update badge
       badge.innerText = task.status;
       badge.className = `task-badge badge-${task.status}`;
 
       // Update progress bar
       progressBar.style.width = `${task.progress}%`;
 
-      if (task.status === 'downloading') {
+      // Show/Hide Pause Button based on status
+      if (pauseBtn) {
+        if (task.status === 'downloading' || task.status === 'pending') {
+          pauseBtn.style.display = 'flex';
+          pauseBtn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+            </svg>
+            <span class="btn-text">Pause</span>
+          `;
+          pauseBtn.className = 'btn-icon btn-pause';
+        } else if (task.status === 'paused') {
+          pauseBtn.style.display = 'flex';
+          pauseBtn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+            <span class="btn-text">Resume</span>
+          `;
+          pauseBtn.className = 'btn-icon btn-resume';
+        } else {
+          pauseBtn.style.display = 'none';
+        }
+      }
+
+      // Update details
+      if (task.status === 'queued') {
+        speedEtaText.innerText = 'Queued in download list...';
+      } else if (task.status === 'pending') {
+        speedEtaText.innerText = 'Extracting media metadata...';
+      } else if (task.status === 'downloading') {
         speedEtaText.innerText = `Speed: ${task.speed} | ETA: ${task.eta} (${task.progress}%)`;
+      } else if (task.status === 'paused') {
+        speedEtaText.innerText = `Paused at ${task.progress}%`;
       } else if (task.status === 'processing') {
         progressBar.classList.add('success');
         speedEtaText.innerText = `Merging streams and encoding... please wait.`;
       } else if (task.status === 'completed') {
         progressBar.style.width = '100%';
         progressBar.classList.add('success');
-        speedEtaText.innerText = `Size: ${task.file_size} | Download ready`;
+        speedEtaText.innerText = `Size: ${task.file_size} | Download complete`;
         
         // Show Download Button
         actionContainer.innerHTML = `
@@ -663,19 +1083,82 @@
             GET FILE
           </button>
         `;
+        
+        // Trigger auto download if not already done
+        if (card.dataset.downloadTriggered !== 'true') {
+          card.dataset.downloadTriggered = 'true';
+          triggerFileDownload(taskId);
+        }
+        
+        // Hide cancel button
+        const cancelBtn = card.querySelector('.btn-cancel');
+        if (cancelBtn) cancelBtn.style.display = 'none';
+        
       } else if (task.status === 'failed') {
         speedEtaText.innerText = `Failed to download.`;
         errorContainer.innerText = task.error || 'Unknown download error occurred.';
         errorContainer.style.display = 'block';
+        
+        // Hide cancel button
+        const cancelBtn = card.querySelector('.btn-cancel');
+        if (cancelBtn) cancelBtn.style.display = 'none';
+      } else if (task.status === 'cancelled') {
+        progressBar.style.width = '0%';
+        speedEtaText.innerText = 'Cancelled by user.';
+        errorContainer.innerText = 'Download has been aborted.';
+        errorContainer.style.display = 'block';
+        
+        // Hide cancel button
+        const cancelBtn = card.querySelector('.btn-cancel');
+        if (cancelBtn) cancelBtn.style.display = 'none';
+      }
+    }
+
+    async function togglePauseTask(taskId) {
+      const badge = document.getElementById(`badge-${taskId}`);
+      const isPaused = badge.innerText.toLowerCase() === 'paused';
+      const endpoint = isPaused ? `/api/resume/${taskId}` : `/api/pause/${taskId}`;
+      
+      try {
+        const res = await fetch(endpoint, { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          // Force immediate status display change
+          badge.innerText = data.status;
+          badge.className = `task-badge badge-${data.status}`;
+        }
+      } catch (err) {
+        console.error('Error toggling pause state:', err);
+      }
+    }
+
+    async function cancelTask(taskId) {
+      if (!confirm('Are you sure you want to cancel this download?')) return;
+      try {
+        const res = await fetch(`/api/cancel/${taskId}`, { method: 'POST' });
+        if (res.ok) {
+          const card = document.getElementById(`task-${taskId}`);
+          if (card) {
+            card.style.opacity = '0.65';
+            document.getElementById(`badge-${taskId}`).innerText = 'cancelled';
+            document.getElementById(`badge-${taskId}`).className = 'task-badge badge-failed';
+            document.getElementById(`speed-eta-${taskId}`).innerText = 'Cancelled by user.';
+            document.getElementById(`progress-${taskId}`).style.width = '0%';
+            
+            const actions = document.getElementById(`action-${taskId}`);
+            if (actions) actions.innerHTML = '';
+            
+            const cancelBtn = card.querySelector('.btn-cancel');
+            if (cancelBtn) cancelBtn.style.display = 'none';
+          }
+        }
+      } catch (err) {
+        console.error('Error cancelling task:', err);
       }
     }
 
     function triggerFileDownload(taskId) {
-      // Triggers browser download by opening the download link
       window.location.href = `/api/file/${taskId}`;
-      
-      // Once user triggers the file download, the backend schedules the temp folder for deletion.
-      // We can update the UI card action button to show that it is downloading / cleaned.
       const actionContainer = document.getElementById(`action-${taskId}`);
       actionContainer.innerHTML = `<span style="font-size: 0.8rem; color: var(--success-color); font-weight: 500;">✓ Download Initiated</span>`;
     }

@@ -115,4 +115,8 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
    run this command
    ```bash
    python -m PyInstaller --noconfirm "Universal Downloader.spec"
+
+ # To enable FastAPI server
+   # Start the server with hot-reload enabled
+   uvicorn web.app:app --reload
    ```

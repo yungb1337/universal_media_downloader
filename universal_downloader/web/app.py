@@ -29,8 +29,9 @@ class ThreadLocalConfigProxy:
         self._base = base_config
         self._local = threading.local()
 
-    def set_override(self, audio_only: bool, highest_res: bool, downloads_dir: Path, 
+    def set_override(self, task_id: str, audio_only: bool, highest_res: bool, downloads_dir: Path, 
                      cookies_from_browser: Optional[str] = None, cookies_file: Optional[str] = None):
+        self._local.task_id = task_id
         self._local.audio_only = audio_only
         self._local.highest_res = highest_res
         self._local.downloads_dir = downloads_dir
@@ -38,6 +39,7 @@ class ThreadLocalConfigProxy:
         self._local.cookies_file = cookies_file
 
     def clear_override(self):
+        if hasattr(self._local, "task_id"): del self._local.task_id
         if hasattr(self._local, "audio_only"): del self._local.audio_only
         if hasattr(self._local, "highest_res"): del self._local.highest_res
         if hasattr(self._local, "downloads_dir"): del self._local.downloads_dir
@@ -45,6 +47,13 @@ class ThreadLocalConfigProxy:
         if hasattr(self._local, "cookies_file"): del self._local.cookies_file
 
     def __getattr__(self, name):
+        if name == "max_retries":
+            # If the current thread's task was cancelled, override max_retries to 1
+            # so the backend's retry loop breaks immediately on the next exception
+            task_id = getattr(self._local, "task_id", None)
+            if task_id and DOWNLOAD_TASKS.get(task_id, {}).get("status") == "cancelled":
+                return 1
+        
         if hasattr(self._local, name):
             return getattr(self._local, name)
         return getattr(self._base, name)
@@ -191,6 +200,7 @@ def download_worker(task_id: str, url: str, audio_only: bool, highest_res: bool,
 
     # 2. Configure proxy settings for this specific download thread
     config_proxy.set_override(
+        task_id=task_id,
         audio_only=audio_only,
         highest_res=highest_res,
         downloads_dir=task_dir,
@@ -311,10 +321,37 @@ def queue_processor():
                 t.start()
 
 
+def periodic_cleanup():
+    """
+    Cleans up any temporary directories in web_tmp that are older than 30 minutes.
+    This guarantees that orphaned, cancelled, or failed downloads don't build up over time.
+    """
+    while True:
+        time.sleep(60)
+        try:
+            if not WEB_DOWNLOADS_ROOT.exists():
+                continue
+            now = time.time()
+            for folder in WEB_DOWNLOADS_ROOT.iterdir():
+                if folder.is_dir():
+                    mtime = folder.stat().st_mtime
+                    # 1800 seconds = 30 minutes
+                    if now - mtime > 1800:
+                        shutil.rmtree(folder, ignore_errors=True)
+                        logger.info(f"Cleaned up expired temp folder: {folder.name}")
+        except Exception as e:
+            logger.error(f"Error in periodic cleanup: {e}")
+
+
 @app.on_event("startup")
-def start_queue():
-    t = threading.Thread(target=queue_processor, daemon=True)
-    t.start()
+def start_background_threads():
+    # Start queue processor
+    t_queue = threading.Thread(target=queue_processor, daemon=True)
+    t_queue.start()
+
+    # Start periodic file cleaner
+    t_cleanup = threading.Thread(target=periodic_cleanup, daemon=True)
+    t_cleanup.start()
 
 
 # ── API Routes ──

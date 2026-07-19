@@ -70,8 +70,8 @@ chaquopy {
         // Must match the Python version on this machine (3.14.x)
         version = "3.14"
 
-        // Explicitly point to the local Python 3.14 executable so Chaquopy
-        // doesn't fail auto-detection on Windows PATH configurations
+        // Local Python path (Update this if building on a different PC)
+        // On many machines, simply using "python" or "python3" works if added to PATH.
         buildPython("C:/Users/Asus/AppData/Local/Python/bin/python.exe")
 
         // Disable pre-compilation to .pyc — avoids cross-version bytecode issues

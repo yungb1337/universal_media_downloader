@@ -48,7 +48,7 @@ class DownloadService : Service() {
      * Start the download session within this foreground service.
      * Called from DownloadViewModel after binding to the service.
      */
-    fun startDownloading(linksText: String, settings: DownloadSettings) {
+    fun startDownloading(linksText: String, settings: DownloadSettings, formatsMap: Map<String, String> = emptyMap()) {
         // Start foreground immediately with an initial notification
         val notification = NotificationHelper.buildProgressNotification(
             this, "Preparing downloads...", "", "", 0
@@ -84,7 +84,7 @@ class DownloadService : Service() {
             }
 
             // Start the actual download
-            repository.startDownload(linksText, settings, serviceScope)
+            repository.startDownload(linksText, settings, serviceScope, formatsMap)
         }
     }
 

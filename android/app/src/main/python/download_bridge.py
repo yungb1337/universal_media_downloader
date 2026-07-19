@@ -24,14 +24,52 @@ from com.universaldownloader.engine import PythonBridge
 
 # ── Utility functions (ported from utils/helpers.py) ─────────────────────────
 
-def sanitize_filename(filename):
-    """Remove characters invalid for Android file systems."""
+def sanitize_filename(filename, max_length=100):
+    """Remove characters invalid for Android file systems and truncate strictly."""
     if not filename:
         return "Unknown"
+
+    # If title is a URL, use a generic name
+    if filename.startswith("http") or "://" in filename:
+        return "Video"
+
+    # Basic illegal character removal
     sanitized = re.sub(r'[\\/:*?"<>|]', "", filename)
     sanitized = re.sub(r"\s+", " ", sanitized)
     sanitized = re.sub(r"\.{2,}", ".", sanitized)
-    return sanitized.strip()
+    sanitized = sanitized.strip()
+
+    # Truncate strictly to 100 characters for Android safety
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length].strip()
+
+    return sanitized
+
+
+def clean_error_message(error_str):
+    """Strip HTML tags and truncate massive server responses for cleaner logs."""
+    if not error_str:
+        return "Unknown error"
+
+    # Aggressive cleaning of server trash
+    err_lower = error_str.lower()
+    if "<html" in err_lower or "<body" in err_lower:
+        return "Server Error: Access Denied or Bot Challenge detected. Please re-extract cookies in Settings."
+
+    if "file name too long" in err_lower or "path too long" in err_lower:
+        return "File Name Error: The video title is too complex. I'm trying a simpler name."
+
+    if '{"' in error_str and '"}' in error_str:
+        return "Server Error: The website returned raw technical data. Try a different resolution."
+
+    # Strip URL-looking strings to prevent log clutter
+    error_str = re.sub(r'https?://\S+', '[URL]', error_str)
+
+    # If it's a massive block of text, only keep the first and last bit
+    if len(error_str) > 250:
+        return error_str[:120] + " ... " + error_str[-120:]
+
+    return error_str.strip()
 
 
 def extract_video_id(filename):
@@ -67,7 +105,8 @@ def build_format_string(highest_res, audio_only):
 # ── yt-dlp options builder (ported from YtDlpBackend._build_ydl_opts) ────────
 
 def build_ydl_opts(output_template, format_string, cookies_file=None,
-                   ffmpeg_path=None, audio_only=False, progress_listener=None):
+                   ffmpeg_path=None, audio_only=False, audio_format="m4a",
+                   audio_quality="320", progress_listener=None):
     """
     Build yt-dlp options dict.
 
@@ -137,13 +176,20 @@ def build_ydl_opts(output_template, format_string, cookies_file=None,
         # On Android, the binary is renamed to libffmpeg.so
         opts["ffmpeg_location"] = ffmpeg_path
 
-    # Audio-only: extract to MP3 320kbps (only if FFmpeg is available)
+    # Audio-only: extract to chosen format (only if FFmpeg is available)
     if audio_only and ffmpeg_path:
-        opts["postprocessors"] = [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": "320",
-        }]
+        if audio_format == "best":
+            # Original high-quality stream, no conversion (fastest, safest)
+            opts["postprocessors"] = [{
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "best",
+            }]
+        else:
+            opts["postprocessors"] = [{
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": audio_format,
+                "preferredquality": audio_quality,
+            }]
 
     # Cookie file for bot bypass
     if cookies_file:
@@ -216,56 +262,84 @@ def probe_url(url, cookies_file=None, max_retries=3):
 
 def get_playlist_info(url, cookies_file=None):
     """
-    Fetch metadata for all videos in a playlist (or a single video).
-    Uses extract_flat=True to be very fast.
+    CLEAN REBUILD: Fetch full metadata for videos/playlists with grouped formats.
     """
     opts = {
-        "extract_flat": True,
         "quiet": True,
         "no_warnings": True,
+        "extract_flat": False,
+        "playlist_items": "1-20", # Safety limit
     }
     if cookies_file:
         opts["cookiefile"] = cookies_file
 
+    def process_entry(info):
+        """Extract and clean formats for a single video entry."""
+        formats = []
+        for f in info.get("formats", []):
+            vcodec = f.get("vcodec")
+            acodec = f.get("acodec")
+
+            is_video = vcodec != "none"
+            is_audio = vcodec == "none" and acodec != "none"
+
+            if is_video or is_audio:
+                # Clean label: 1080p, 720p, etc.
+                if is_video:
+                    h = f.get("height")
+                    label = "{}p".format(h) if h else (f.get("resolution") or "Video")
+                else:
+                    label = "Audio"
+
+                formats.append({
+                    "id": f.get("format_id"),
+                    "res": label,
+                    "ext": f.get("ext"),
+                    "type": "video" if is_video else "audio",
+                    "size": f.get("filesize") or f.get("filesize_approx") or 0,
+                    "height": f.get("height") or 0
+                })
+
+        # Sort: Video (Highest First), then Audio
+        formats.sort(key=lambda x: (0 if x["type"] == "video" else 1, -x["height"], -x["size"]))
+
+        return {
+            "url": info.get("webpage_url") or info.get("url"),
+            "title": info.get("title") or "Unknown",
+            "thumb": info.get("thumbnail"),
+            "formats": formats[:25]
+        }
+
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+            data = ydl.extract_info(url, download=False)
+            if not data:
+                return json.dumps({"success": False, "error": "No data found"})
 
-            if not info:
-                return json.dumps({"success": False, "error": "No info found"})
-
-            # Check if it's a single video or a playlist
-            entries = []
-            if "entries" in info:
-                # It's a playlist
-                for entry in info["entries"]:
-                    if entry:
-                        entries.append({
-                            "url": entry.get("url") or entry.get("webpage_url"),
-                            "title": entry.get("title") or "Unknown Title"
-                        })
+            results = []
+            if "entries" in data:
+                for entry in data["entries"]:
+                    if entry: results.append(process_entry(entry))
+                is_list = True
             else:
-                # It's a single video
-                entries.append({
-                    "url": info.get("webpage_url") or url,
-                    "title": info.get("title") or "Unknown Title"
-                })
+                results.append(process_entry(data))
+                is_list = False
 
             return json.dumps({
                 "success": True,
-                "entries": entries,
-                "playlist_title": info.get("title", "Selection")
+                "is_playlist": is_list,
+                "entries": results
             })
-
     except Exception as e:
-        return json.dumps({"success": False, "error": str(e)})
+        return json.dumps({"success": False, "error": clean_error_message(str(e))})
 
 
 # ── Main download function (called from Kotlin via Chaquopy) ─────────────────
 
 def download_url(url, output_dir, highest_res, audio_only,
                  cookies_file, ffmpeg_path, max_retries,
-                 custom_name, progress_listener):
+                 custom_name, format_id, audio_format, audio_quality,
+                 progress_listener):
     """
     Download a single URL. This is the main entry point called from Kotlin.
 
@@ -280,9 +354,27 @@ def download_url(url, output_dir, highest_res, audio_only,
     cookies_file = cookies_file if cookies_file else None
     ffmpeg_path = ffmpeg_path if ffmpeg_path else None
     custom_name = custom_name if custom_name else None
+    format_id = format_id if format_id and format_id != "auto" else None
+    audio_format = audio_format if audio_format else "m4a"
+    audio_quality = audio_quality if audio_quality else "320"
+
+    # DECOUPLING LOGIC: If a specific format_id is provided, it dictates the job type.
+    if format_id:
+        if format_id == "bestaudio":
+            audio_only = True
+        else:
+            audio_only = False
 
     # Ensure output directory exists
-    os.makedirs(output_dir, exist_ok=True)
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+    except OSError as e:
+        return json.dumps({
+            "url": url,
+            "success": False,
+            "error": "Folder Error: Cannot create download directory. Path may be too long or restricted.",
+            "duration_seconds": 0.1,
+        })
 
     # ── Step 1: Probe for metadata ──
     probe_result = json.loads(probe_url(url, cookies_file, max_retries))
@@ -292,7 +384,7 @@ def download_url(url, output_dir, highest_res, audio_only,
         return json.dumps({
             "url": url,
             "success": False,
-            "error": probe_result.get("error", "Probe failed"),
+            "error": clean_error_message(probe_result.get("error", "Probe failed")),
             "duration_seconds": elapsed,
         })
 
@@ -316,17 +408,50 @@ def download_url(url, output_dir, highest_res, audio_only,
                         "duration_seconds": elapsed,
                     })
 
-    # ── Step 3: Build output template (same naming as desktop) ──
-    final_title = custom_name or title or "Unknown"
-    safe_title = sanitize_filename(final_title)
+    # ── Step 3: Build output template ──
+    # Quality prefix logic
+    quality_label = ""
+    if format_id:
+        # Sanitize format_id: remove URL parts and illegal chars, limit to 10 chars
+        if "://" in str(format_id):
+            quality_label = "Fmt"
+        else:
+            quality_label = re.sub(r'[^a-zA-Z0-9]', '', str(format_id))[:10]
+    elif audio_only:
+        quality_label = audio_format.upper()[:5]
+    elif highest_res:
+        quality_label = "BEST"
 
+    # Define final_title for return JSON (must exist for Step 4 error handling and final return)
+    final_title = custom_name or title or "Video"
+
+    # Sanitize title and ensure it's not a URL for the file system
+    clean_title = sanitize_filename(final_title, max_length=80)
+
+    # Construct final safe filename base
     if video_id:
-        template = str(Path(output_dir) / "{} [{}].%(ext)s".format(safe_title, video_id))
+        # e.g. "1080p VideoTitle [id]"
+        filename_base = "{} {} [{}]".format(quality_label, clean_title, video_id).strip()
     else:
-        template = str(Path(output_dir) / "{}.%(ext)s".format(safe_title))
+        filename_base = "{} {}".format(quality_label, clean_title).strip()
 
-    # ── Step 4: Download with retries (same exponential backoff) ──
-    format_string = build_format_string(highest_res, audio_only)
+    # Final safety check on the whole name
+    filename_base = sanitize_filename(filename_base, max_length=120)
+
+    template = str(Path(output_dir) / "{}.%(ext)s".format(filename_base))
+
+    # ── Step 4: Download with retries ──
+    if audio_only:
+        format_string = "bestaudio/best"
+    elif format_id:
+        if format_id == "bestaudio":
+            format_string = "bestaudio/best"
+        else:
+            # If user picked a specific format, use it (and add best audio if it's video only)
+            format_string = "{}+bestaudio/{}".format(format_id, format_id)
+    else:
+        format_string = build_format_string(highest_res, audio_only)
+
     last_error = None
 
     for attempt in range(1, max_retries + 1):
@@ -337,6 +462,8 @@ def download_url(url, output_dir, highest_res, audio_only,
                 cookies_file=cookies_file,
                 ffmpeg_path=ffmpeg_path,
                 audio_only=audio_only,
+                audio_format=audio_format,
+                audio_quality=audio_quality,
                 progress_listener=progress_listener,
             )
 
@@ -348,7 +475,7 @@ def download_url(url, output_dir, highest_res, audio_only,
 
                 # Find the actual downloaded file
                 final_path = _resolve_downloaded_path(
-                    info, video_id, safe_title, output_dir, audio_only
+                    info, video_id, filename_base, output_dir, audio_only, audio_format
                 )
 
                 if final_path and Path(final_path).exists():
@@ -362,6 +489,8 @@ def download_url(url, output_dir, highest_res, audio_only,
                         "file_path": final_path,
                         "file_size_bytes": fsize,
                         "duration_seconds": elapsed,
+                        "thumbnail": info.get("thumbnail"),
+                        "quality": info.get("format_note") or info.get("resolution") or "auto"
                     })
                 else:
                     raise RuntimeError("Download completed but file not found")
@@ -388,13 +517,13 @@ def download_url(url, output_dir, highest_res, audio_only,
     return json.dumps({
         "url": url,
         "success": False,
-        "error": last_error,
+        "error": clean_error_message(last_error),
         "title": final_title,
         "duration_seconds": elapsed,
     })
 
 
-def _resolve_downloaded_path(info, video_id, safe_title, output_dir, audio_only):
+def _resolve_downloaded_path(info, video_id, safe_title, output_dir, audio_only, audio_format="m4a"):
     """
     Resolve the actual file path after download.
     Same 5-source fallback chain as the desktop YtDlpBackend._resolve_downloaded_path.
@@ -414,7 +543,12 @@ def _resolve_downloaded_path(info, video_id, safe_title, output_dir, audio_only)
     # Source 3: reconstruct from template
     ext = info.get("ext", "mp4")
     if audio_only:
-        ext = "mp3"
+        # If 'best', extension will depend on source (m4a, mp3, opus)
+        # For simplicity, we fallback to common extensions if 'best' is chosen
+        if audio_format == "best":
+            ext = info.get("ext", "m4a")
+        else:
+            ext = audio_format
 
     downloads_dir = Path(output_dir)
 
@@ -435,3 +569,4 @@ def _resolve_downloaded_path(info, video_id, safe_title, output_dir, audio_only)
             return str(f)
 
     return None
+

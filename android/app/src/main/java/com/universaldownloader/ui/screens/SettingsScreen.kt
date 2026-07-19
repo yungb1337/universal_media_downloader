@@ -4,14 +4,11 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.filled.DeleteSweep
+import com.universaldownloader.ui.theme.Error
+import com.universaldownloader.ui.theme.Panel
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -27,6 +24,7 @@ import com.universaldownloader.util.FileUtils
 import com.universaldownloader.ui.components.NumericField
 import com.universaldownloader.ui.components.PathField
 import com.universaldownloader.ui.components.SettingsToggle
+import com.universaldownloader.ui.components.SettingsDropdown
 import com.universaldownloader.ui.components.LoginBrowserDialog
 import com.universaldownloader.ui.theme.Accent
 import com.universaldownloader.ui.theme.Background
@@ -139,14 +137,7 @@ fun SettingsScreen(
                             label = "Highest Res",
                             checked = settings.highestRes,
                             onToggle = { viewModel.toggleHighestRes(it) },
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        SettingsToggle(
-                            label = "Audio Only",
-                            checked = settings.audioOnly,
-                            onToggle = { viewModel.toggleAudioOnly(it) },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
 
@@ -172,6 +163,33 @@ fun SettingsScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Audio Settings Section
+                    Text(
+                        text = "Audio Settings",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Accent
+                    )
+
+                    SettingsDropdown(
+                        label = "Audio Format",
+                        value = settings.audioFormat,
+                        options = listOf("m4a", "mp3", "best"),
+                        displayOptions = listOf("M4A (High Compatibility)", "MP3 (Requires Lame)", "Original (No Conversion)"),
+                        onValueChange = { viewModel.updateAudioFormat(it) }
+                    )
+
+                    if (settings.audioFormat != "best") {
+                        SettingsDropdown(
+                            label = "Audio Bitrate",
+                            value = settings.audioQuality,
+                            options = listOf("128", "192", "256", "320"),
+                            displayOptions = listOf("128 kbps", "192 kbps", "256 kbps", "320 kbps"),
+                            onValueChange = { viewModel.updateAudioQuality(it) }
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
@@ -218,10 +236,39 @@ fun SettingsScreen(
 
                     PathField(
                         label = "Current Folder Path",
-                        value = settings.downloadDir,
+                        value = settings.downloadDir.ifBlank { "Downloads/Universal Downloader (System Default)" },
                         onClick = { dirPickerLauncher.launch(null) },
                         placeholder = "App-specific external storage (Default)"
                     )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Maintenance Section
+                    Text(
+                        text = "Maintenance",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Accent
+                    )
+
+                    Button(
+                        onClick = { downloadViewModel.clearCache() },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Panel),
+                        shape = MaterialTheme.shapes.small
+                    ) {
+                        Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Cleanup Temporary Storage", color = TextPrimary)
+                    }
+
+                    OutlinedButton(
+                        onClick = { downloadViewModel.clearHistory() },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.small,
+                        border = BorderStroke(1.dp, Error.copy(alpha = 0.5f))
+                    ) {
+                        Text("Clear Download History", color = Error)
+                    }
                 }
             }
         }

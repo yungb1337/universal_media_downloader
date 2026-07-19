@@ -16,27 +16,29 @@ class DownloadWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val linksText = inputData.getString("links_text") ?: return@withContext Result.failure()
-        val settingsJson = inputData.getString("settings_json") ?: return@withContext Result.failure()
+        val formatsJson = inputData.getString("formats_json") ?: "{}"
+        val forceAudio = inputData.getBoolean("force_audio", false)
         
-        // Parse settings (Simplified for now, should ideally use a proper JSON parser or separate fields)
         val app = applicationContext as DownloaderApp
         val repository = app.downloadRepository
-        val settings = app.settingsRepository.downloadSettings // Use current settings or pass via Data
         
-        // Create initial notification
+        val formatsMap = mutableMapOf<String, String>()
+        try {
+            val json = org.json.JSONObject(formatsJson)
+            json.keys().forEach { key ->
+                formatsMap[key] = json.getString(key)
+            }
+        } catch (_: Exception) {}
+
+        // Show foreground notification
         setForeground(getForegroundInfo())
 
         try {
-            // We need a way to run startDownload without needing a specific CoroutineScope passed in, 
-            // as startDownload currently takes one.
-            // Actually, startDownload should ideally manage its own scope or use the one provided.
-            // In Worker, we use the Worker's scope.
-            
-            // Re-fetching latest settings from repository flow (collect first)
-            // For simplicity, let's assume we use what's in the inputData or just the current ones.
-            
-            // NOTE: Repository.startDownload needs to be adapted or called with this scope.
-            repository.startDownload(linksText, app.settingsRepository.getCurrentSettings(), this)
+            var settings = app.settingsRepository.getCurrentSettings()
+            if (forceAudio) {
+                settings = settings.copy(audioOnly = true)
+            }
+            repository.startDownload(linksText, settings, this, formatsMap)
             Result.success()
         } catch (e: Exception) {
             app.downloadEngine.addLog("❌ Worker failed: ${e.message}", LogTag.ERROR)
@@ -47,8 +49,18 @@ class DownloadWorker(
     override suspend fun getForegroundInfo(): ForegroundInfo {
         NotificationHelper.createNotificationChannel(applicationContext)
         val notification = NotificationHelper.buildProgressNotification(
-            applicationContext, "Background Download", "Starting...", "", 0
+            applicationContext, 
+            "Background Download", 
+            "Processing URLs...", 
+            "", 
+            0
         )
-        return ForegroundInfo(NotificationHelper.NOTIFICATION_ID, notification)
+        // Note: For Android 14+, you must specify the foreground service type in the manifest for the worker too.
+        // But for simplicity, we use the standard NOTIFICATION_ID.
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            ForegroundInfo(NotificationHelper.NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            ForegroundInfo(NotificationHelper.NOTIFICATION_ID, notification)
+        }
     }
 }

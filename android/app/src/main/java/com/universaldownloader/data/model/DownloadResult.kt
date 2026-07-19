@@ -13,5 +13,7 @@ data class DownloadResult(
     val durationSeconds: Double = 0.0,
     val fileSizeBytes: Long = 0,
     val skipped: Boolean = false,
-    val lineNumber: Int = 0
+    val lineNumber: Int = 0,
+    val thumbnail: String? = null,
+    val quality: String? = null
 )

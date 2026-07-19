@@ -56,4 +56,16 @@ class SettingsViewModel(
             settingsRepository.updateCookiesFile(path)
         }
     }
+
+    fun updateAudioFormat(value: String) {
+        viewModelScope.launch {
+            settingsRepository.updateAudioFormat(value)
+        }
+    }
+
+    fun updateAudioQuality(value: String) {
+        viewModelScope.launch {
+            settingsRepository.updateAudioQuality(value)
+        }
+    }
 }

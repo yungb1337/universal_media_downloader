@@ -3,6 +3,7 @@ package com.universaldownloader.data.repository
 import com.universaldownloader.data.settings.AppSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 
 /**
  * Snapshot of all download-related settings.
@@ -15,7 +16,9 @@ data class DownloadSettings(
     val downloadDirUri: String = "",
     val maxConcurrent: Int = 1,
     val maxRetries: Int = 3,
-    val cookiesFile: String = ""
+    val cookiesFile: String = "",
+    val audioFormat: String = "m4a",
+    val audioQuality: String = "320"
 )
 
 /**
@@ -26,7 +29,7 @@ class SettingsRepository(private val settings: AppSettings) {
 
     /**
      * Combined flow of all download settings.
-     * Uses nested combine() for type safety with 7 flows.
+     * Uses nested combine() for type safety.
      */
     val downloadSettings: Flow<DownloadSettings> = combine(
         settings.highestRes,
@@ -46,6 +49,10 @@ class SettingsRepository(private val settings: AppSettings) {
         partial.copy(maxRetries = maxRetries)
     }.combine(settings.cookiesFile) { partial, cookiesFile ->
         partial.copy(cookiesFile = cookiesFile)
+    }.combine(settings.audioFormat) { partial, audioFormat ->
+        partial.copy(audioFormat = audioFormat)
+    }.combine(settings.audioQuality) { partial, audioQuality ->
+        partial.copy(audioQuality = audioQuality)
     }
 
     suspend fun updateHighestRes(value: Boolean) = settings.setHighestRes(value)
@@ -55,4 +62,30 @@ class SettingsRepository(private val settings: AppSettings) {
     suspend fun updateMaxConcurrent(value: Int) = settings.setMaxConcurrent(value)
     suspend fun updateMaxRetries(value: Int) = settings.setMaxRetries(value)
     suspend fun updateCookiesFile(value: String) = settings.setCookiesFile(value)
+    suspend fun updateAudioFormat(value: String) = settings.setAudioFormat(value)
+    suspend fun updateAudioQuality(value: String) = settings.setAudioQuality(value)
+
+    suspend fun getCurrentSettings(): DownloadSettings {
+        val highestResVal = settings.highestRes.first()
+        val audioOnlyVal = settings.audioOnly.first()
+        val downloadDirVal = settings.downloadDir.first()
+        val downloadDirUriVal = settings.downloadDirUri.first()
+        val maxConcurrentVal = settings.maxConcurrent.first()
+        val maxRetriesVal = settings.maxRetries.first()
+        val cookiesFileVal = settings.cookiesFile.first()
+        val audioFormatVal = settings.audioFormat.first()
+        val audioQualityVal = settings.audioQuality.first()
+
+        return DownloadSettings(
+            highestRes = highestResVal,
+            audioOnly = audioOnlyVal,
+            downloadDir = downloadDirVal,
+            downloadDirUri = downloadDirUriVal,
+            maxConcurrent = maxConcurrentVal,
+            maxRetries = maxRetriesVal,
+            cookiesFile = cookiesFileVal,
+            audioFormat = audioFormatVal,
+            audioQuality = audioQualityVal
+        )
+    }
 }

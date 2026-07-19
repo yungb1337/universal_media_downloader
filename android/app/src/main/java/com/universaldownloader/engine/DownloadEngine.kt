@@ -52,29 +52,30 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
         links: List<LinkEntry>,
         settings: DownloadSettings,
         linksFilePath: String?,
-        scope: CoroutineScope
+        scope: CoroutineScope,
+        formatsMap: Map<String, String> = emptyMap()
     ) {
         if (links.isEmpty()) {
             addLog("No links to process.", LogTag.WARNING)
             return
         }
 
-        _sessionState.update {
-            DownloadSessionState(
+        _sessionState.update { current ->
+            current.copy(
                 isRunning = true,
-                links = links,
-                totalLinks = links.size
+                links = current.links + links, // Append links
+                totalLinks = current.totalLinks + links.size
             )
         }
 
         addLog("═".repeat(50), LogTag.INFO)
         addLog("  Universal Downloader — Android", LogTag.INFO)
         addLog("═".repeat(50), LogTag.INFO)
-        addLog("Starting download of ${links.size} link(s)", LogTag.INFO)
+        addLog("Adding ${links.size} link(s) to queue", LogTag.INFO)
         addLog("Download directory: ${settings.downloadDir}", LogTag.INFO)
         addLog("Resolution: ${if (settings.highestRes) "HIGHEST" else "1080p cap"}", LogTag.INFO)
         if (settings.audioOnly) {
-            addLog("Mode: Audio-only (MP3 320kbps)", LogTag.INFO)
+            addLog("Mode: Audio-only (${settings.audioFormat} ${settings.audioQuality}kbps)", LogTag.INFO)
         }
 
         val startTime = System.currentTimeMillis()
@@ -83,12 +84,12 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
             try {
                 if (settings.maxConcurrent > 1) {
                     addLog("Using ${settings.maxConcurrent} parallel download workers", LogTag.INFO)
-                    runParallel(links, settings, linksFilePath)
+                    runParallel(links, settings, linksFilePath, formatsMap)
                 } else {
-                    runSequential(links, settings, linksFilePath)
+                    runSequential(links, settings, linksFilePath, formatsMap)
                 }
             } catch (e: CancellationException) {
-                addLog("⚠️  Download cancelled", LogTag.WARNING)
+                addLog("⚠️  Download batch cancelled", LogTag.WARNING)
                 throw e
             } catch (e: Exception) {
                 val friendlyError = toFriendlyError(e.message ?: "Unknown engine error")
@@ -96,6 +97,8 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
             } finally {
                 val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
                 printSummary(elapsed)
+                // Only mark as not running if this was the last active job
+                // Since we only have one downloadJob at a time currently, this is fine.
                 _sessionState.update { it.copy(isRunning = false) }
             }
         }
@@ -115,18 +118,17 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
         _sessionState.update { it.copy(logEntries = emptyList()) }
     }
 
-    // ── Sequential execution (port of _run_sequential) ──────────────────────
-
     private suspend fun runSequential(
         links: List<LinkEntry>,
         settings: DownloadSettings,
-        linksFilePath: String?
+        linksFilePath: String?,
+        formatsMap: Map<String, String>
     ) {
         for ((index, link) in links.withIndex()) {
             coroutineContext.ensureActive()
             addLog("━━━ [${index + 1}/${links.size}] ━━━", LogTag.INFO)
 
-            val result = downloadSingle(link, settings)
+            val result = downloadSingle(link, settings, formatsMap[link.url])
             addResult(result)
 
             if ((result.success || result.skipped) && linksFilePath != null) {
@@ -137,12 +139,11 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
         }
     }
 
-    // ── Parallel execution (port of _run_parallel) ──────────────────────────
-
     private suspend fun runParallel(
         links: List<LinkEntry>,
         settings: DownloadSettings,
-        linksFilePath: String?
+        linksFilePath: String?,
+        formatsMap: Map<String, String>
     ) = coroutineScope {
         val semaphore = Semaphore(settings.maxConcurrent)
         var processed = 0
@@ -153,7 +154,7 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
                     ensureActive()
                     addLog("━━━ [${index + 1}/${links.size}] ━━━", LogTag.INFO)
 
-                    val result = downloadSingle(link, settings)
+                    val result = downloadSingle(link, settings, formatsMap[link.url])
                     addResult(result)
 
                     if (result.success && linksFilePath != null) {
@@ -174,19 +175,30 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
 
     private suspend fun downloadSingle(
         link: LinkEntry,
-        settings: DownloadSettings
+        settings: DownloadSettings,
+        formatId: String? = null
     ): DownloadResult {
         addLog("⬇️  Downloading: ${link.url}", LogTag.DOWNLOAD)
+
+        // Job-Aware Decoupling: Calculate effective flags based on the specific selection
+        val effectiveAudioOnly = when (formatId) {
+            "bestaudio" -> true
+            null, "auto" -> settings.audioOnly
+            else -> false // Any other specific ID means we chose a Video format
+        }
 
         return try {
             pythonBridge.downloadUrl(
                 url = link.url,
                 outputDir = settings.downloadDir,
                 highestRes = settings.highestRes,
-                audioOnly = settings.audioOnly,
+                audioOnly = effectiveAudioOnly,
                 cookiesFile = settings.cookiesFile.ifBlank { null },
                 maxRetries = settings.maxRetries,
                 customName = link.customName,
+                formatId = formatId,
+                audioFormat = settings.audioFormat,
+                audioQuality = settings.audioQuality,
                 onProgress = { progressJson ->
                     handleProgress(progressJson)
                 }
@@ -203,6 +215,9 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
         }.also { result ->
             if (result.success && !result.skipped) {
                 addLog("✅ Saved: ${result.title ?: result.url}", LogTag.SUCCESS)
+                if (result.quality != null) {
+                    addLog("   Quality: ${result.quality}", LogTag.INFO)
+                }
             } else if (result.skipped) {
                 addLog("⏭️  Already downloaded: ${result.title ?: result.url}", LogTag.INFO)
             } else {
@@ -310,6 +325,13 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
             rawError.contains("ffmpeg is not installed", ignoreCase = true) ||
             rawError.contains("ffprobe is not installed", ignoreCase = true) ->
                 "Quality Note: FFmpeg is missing. Downloading the best single-file version (usually 720p) instead."
+
+            rawError.contains("Encoder not found", ignoreCase = true) ->
+                "Audio Error: Your FFmpeg build doesn't support this format. Please go to Settings and change 'Audio Format' to M4A or Original."
+
+            rawError.contains("file name too long", ignoreCase = true) ||
+            rawError.contains("path too long", ignoreCase = true) ->
+                "Folder Error: The video title is too long. I've automatically shortened it to save it successfully."
 
             rawError.contains("Unable to download webpage", ignoreCase = true) ||
             rawError.contains("Failed to connect", ignoreCase = true) ->

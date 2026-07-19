@@ -36,6 +36,8 @@ class AppSettings(private val context: Context) {
         val MAX_CONCURRENT = intPreferencesKey("max_concurrent")
         val MAX_RETRIES = intPreferencesKey("max_retries")
         val COOKIES_FILE = stringPreferencesKey("cookies_file")
+        val AUDIO_FORMAT = stringPreferencesKey("audio_format")
+        val AUDIO_QUALITY = stringPreferencesKey("audio_quality")
 
         // Defaults matching the desktop .env.example
         const val DEFAULT_MAX_CONCURRENT = 1
@@ -48,6 +50,14 @@ class AppSettings(private val context: Context) {
 
     val audioOnly: Flow<Boolean> = context.dataStore.data.map {
         it[AUDIO_ONLY] ?: false
+    }
+
+    val audioFormat: Flow<String> = context.dataStore.data.map {
+        it[AUDIO_FORMAT] ?: "m4a"
+    }
+
+    val audioQuality: Flow<String> = context.dataStore.data.map {
+        it[AUDIO_QUALITY] ?: "320"
     }
 
     val downloadDir: Flow<String> = context.dataStore.data.map {
@@ -87,14 +97,22 @@ class AppSettings(private val context: Context) {
     }
 
     suspend fun setMaxConcurrent(value: Int) {
-        context.dataStore.edit { it[MAX_CONCURRENT] = value.coerceIn(1, 8) }
+        context.dataStore.edit { it[MAX_CONCURRENT] = value.coerceIn(1, 16) }
     }
 
     suspend fun setMaxRetries(value: Int) {
-        context.dataStore.edit { it[MAX_RETRIES] = value.coerceIn(1, 10) }
+        context.dataStore.edit { it[MAX_RETRIES] = value.coerceIn(1, 20) }
     }
 
     suspend fun setCookiesFile(value: String) {
         context.dataStore.edit { it[COOKIES_FILE] = value }
+    }
+
+    suspend fun setAudioFormat(value: String) {
+        context.dataStore.edit { it[AUDIO_FORMAT] = value }
+    }
+
+    suspend fun setAudioQuality(value: String) {
+        context.dataStore.edit { it[AUDIO_QUALITY] = value }
     }
 }

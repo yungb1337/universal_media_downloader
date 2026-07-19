@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.chaquo.python")
+    id("kotlin-kapt")
 }
 
 android {
@@ -118,4 +119,21 @@ dependencies {
 
     // ── Document File (SAF support for user-chosen download dirs) ──
     implementation("androidx.documentfile:documentfile:1.0.1")
+
+    // ── Room (History Database) ──
+    val roomVersion = "2.6.1"
+    implementation("androidx.room:room-runtime:$roomVersion")
+    implementation("androidx.room:room-ktx:$roomVersion")
+    kapt("androidx.room:room-compiler:$roomVersion")
+
+    // ── WorkManager (Background Robustness) ──
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+
+    // ── Media3 (In-App Player) ──
+    val media3Version = "1.3.1"
+    implementation("androidx.media3:media3-exoplayer:$media3Version")
+    implementation("androidx.media3:media3-ui:$media3Version")
+
+    // ── Coil (Thumbnails) ──
+    implementation("io.coil-kt:coil-compose:2.6.0")
 }

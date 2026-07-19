@@ -17,19 +17,10 @@ import java.io.IOException
 object FileUtils {
 
     /**
-     * Get the default download directory (app-specific external storage).
-     * Files here don't require runtime permissions on API 26+.
+     * Get the default download directory display name.
      */
     fun getDefaultDownloadDir(context: Context): File {
-        // Primary location: "Universal Downloader" folder in internal storage root
-        // Note: Modern Android restricts direct root access. 
-        // We use system Downloads as the most accessible "Default".
-        val dir = File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            "Universal Downloader"
-        )
-        if (!dir.exists()) dir.mkdirs()
-        return dir
+        return File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Universal Downloader")
     }
 
     /**
@@ -94,11 +85,41 @@ object FileUtils {
     }
 
     /**
+     * Clear the internal working directory for downloads.
+     */
+    fun clearTempDirectory(context: Context) {
+        try {
+            val tempDir = File(context.cacheDir, "download_work")
+            if (tempDir.exists()) {
+                tempDir.deleteRecursively()
+                tempDir.mkdirs()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * Get available disk space in bytes for the internal storage.
+     */
+    fun getAvailableDiskSpace(context: Context): Long {
+        return try {
+            val stat = android.os.StatFs(context.filesDir.path)
+            stat.availableBlocksLong * stat.blockSizeLong
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
+    /**
      * Move a file from internal storage to a SAF directory.
      */
     fun moveFileToSafUri(context: Context, sourceFile: File, treeUri: Uri): Boolean {
         try {
             val root = DocumentFile.fromTreeUri(context, treeUri) ?: return false
+            
+            // Auto-Rename fix: sanitize the name to avoid mangling
+            val sanitizedName = sourceFile.name.replace(Regex("[^a-zA-Z0-9.\\-_ ]"), "_")
             
             // Create the file in the target directory
             val mimeType = when (sourceFile.extension.lowercase()) {
@@ -108,7 +129,8 @@ object FileUtils {
                 "webm" -> "video/webm"
                 else -> "application/octet-stream"
             }
-            val targetFile = root.createFile(mimeType, sourceFile.name) ?: return false
+            
+            val targetFile = root.createFile(mimeType, sanitizedName) ?: return false
             
             // Copy data
             context.contentResolver.openOutputStream(targetFile.uri)?.use { output ->
@@ -117,12 +139,82 @@ object FileUtils {
                 }
             }
             
-            // Delete source
-            sourceFile.delete()
-            return true
+            // Verify size before deleting source
+            val targetSize = targetFile.length()
+            if (targetSize == sourceFile.length()) {
+                sourceFile.delete()
+                return true
+            }
+            return false
         } catch (e: Exception) {
             e.printStackTrace()
             return false
+        }
+    }
+
+    /**
+     * Move a file from internal storage to the public Downloads folder using MediaStore.
+     * This ensures the file is accessible to the user and survives app uninstallation.
+     */
+    fun saveFileToMediaStore(context: Context, sourceFile: File): Uri? {
+        val resolver = context.contentResolver
+        val relativePath = Environment.DIRECTORY_DOWNLOADS + File.separator + "Universal Downloader"
+        
+        // Clean filename for MediaStore
+        val cleanName = sourceFile.name.replace(Regex("[^a-zA-Z0-9.\\-_ ]"), "_")
+
+        val contentValues = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, cleanName)
+            put(android.provider.MediaStore.MediaColumns.MIME_TYPE, when (sourceFile.extension.lowercase()) {
+                "mp4" -> "video/mp4"
+                "mp3" -> "audio/mpeg"
+                "m4a" -> "audio/mp4"
+                "mkv" -> "video/x-matroska"
+                "webm" -> "video/webm"
+                else -> "application/octet-stream"
+            })
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                // Forcing Download/ folder requires using the Downloads collection
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+                put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+        }
+
+        // On API 29+, always use the Downloads collection to ensure RELATIVE_PATH = "Download/..." works
+        // On API < 29, use the generic Files collection
+        val collection = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        } else {
+            android.provider.MediaStore.Files.getContentUri("external")
+        }
+
+        // On older Android, manually prepend the folder to the display name for visibility
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
+            contentValues.put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, "Universal Downloader/" + cleanName)
+        }
+
+        val uri = resolver.insert(collection, contentValues) ?: return null
+
+        try {
+            resolver.openOutputStream(uri)?.use { output ->
+                java.io.FileInputStream(sourceFile).use { input ->
+                    input.copyTo(output)
+                }
+            }
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                contentValues.clear()
+                contentValues.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(uri, contentValues, null, null)
+            }
+            
+            sourceFile.delete()
+            return uri
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Cleanup partial file on failure
+            try { resolver.delete(uri, null, null) } catch (_: Exception) {}
+            return null
         }
     }
 

@@ -63,6 +63,9 @@ class PythonBridge {
         cookiesFile: String? = null,
         maxRetries: Int = 3,
         customName: String? = null,
+        formatId: String? = null,
+        audioFormat: String? = null,
+        audioQuality: String? = null,
         onProgress: ((String) -> Unit)? = null
     ): DownloadResult = withContext(Dispatchers.IO) {
         setCancel(false)
@@ -86,6 +89,9 @@ class PythonBridge {
             ffmpegPath ?: "",
             maxRetries,
             customName ?: "",
+            formatId ?: "auto",
+            audioFormat ?: "m4a",
+            audioQuality ?: "320",
             listener
         ).toString()
 
@@ -93,7 +99,7 @@ class PythonBridge {
     }
 
     /**
-     * Fetch playlist or video metadata using yt-dlp flat extraction.
+     * Fetch playlist or video metadata using yt-dlp.
      */
     suspend fun getPlaylistInfo(url: String, cookiesFile: String? = null): List<PlaylistEntry> = withContext(Dispatchers.IO) {
         try {
@@ -108,15 +114,38 @@ class PythonBridge {
                 throw Exception(obj.optString("error", "Unknown analysis error"))
             }
 
-            val entriesArray = obj.getJSONArray("entries")
             val results = mutableListOf<PlaylistEntry>()
+            val entriesArray = obj.getJSONArray("entries")
             for (i in 0 until entriesArray.length()) {
                 val entryObj = entriesArray.getJSONObject(i)
+                
+                // Parse formats for each entry
+                val formatsList = mutableListOf<com.universaldownloader.data.model.VideoFormat>()
+                val formatsArray = entryObj.optJSONArray("formats")
+                if (formatsArray != null) {
+                    for (j in 0 until formatsArray.length()) {
+                        val f = formatsArray.getJSONObject(j)
+                        formatsList.add(
+                            com.universaldownloader.data.model.VideoFormat(
+                                formatId = f.getString("id"),
+                                resolution = f.getString("res"),
+                                ext = f.getString("ext"),
+                                fileSize = f.optLong("size", 0),
+                                type = f.optString("type", "video"),
+                                height = f.optInt("height", 0)
+                            )
+                        )
+                    }
+                }
+
                 results.add(
                     PlaylistEntry(
                         url = entryObj.getString("url"),
                         title = entryObj.getString("title"),
-                        isSelected = true
+                        thumbnail = entryObj.optString("thumb", null),
+                        isSelected = true,
+                        isPlaylist = obj.optBoolean("is_playlist", false),
+                        formats = formatsList
                     )
                 )
             }
@@ -159,6 +188,10 @@ class PythonBridge {
                 durationSeconds = obj.optDouble("duration_seconds", 0.0),
                 fileSizeBytes = obj.optLong("file_size_bytes", 0),
                 skipped = obj.optBoolean("skipped", false),
+                thumbnail = if (obj.has("thumbnail") && !obj.isNull("thumbnail"))
+                    obj.getString("thumbnail") else null,
+                quality = if (obj.has("quality") && !obj.isNull("quality"))
+                    obj.getString("quality") else null
             )
         } catch (e: Exception) {
             DownloadResult(

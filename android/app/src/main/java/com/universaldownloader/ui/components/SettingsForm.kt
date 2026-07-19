@@ -1,33 +1,20 @@
 package com.universaldownloader.ui.components
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.universaldownloader.ui.theme.Accent
-import com.universaldownloader.ui.theme.Background
-import com.universaldownloader.ui.theme.Border
-import com.universaldownloader.ui.theme.Panel
-import com.universaldownloader.ui.theme.Surface
-import com.universaldownloader.ui.theme.TextPrimary
-import com.universaldownloader.ui.theme.TextSecondary
+import com.universaldownloader.ui.theme.*
 
 /**
  * Settings toggle button — port of ToggleButton from desktop gui/widgets.py.
@@ -69,6 +56,9 @@ fun NumericField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Local state to allow smooth editing (e.g. deleting text)
+    var localValue by remember(value) { mutableStateOf(value) }
+
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
@@ -82,10 +72,13 @@ fun NumericField(
         )
 
         OutlinedTextField(
-            value = value,
+            value = localValue,
             onValueChange = { newValue ->
                 if (newValue.all { it.isDigit() } && newValue.length <= 2) {
-                    onValueChange(newValue)
+                    localValue = newValue
+                    if (newValue.isNotEmpty()) {
+                        onValueChange(newValue)
+                    }
                 }
             },
             modifier = Modifier.width(64.dp),
@@ -101,6 +94,77 @@ fun NumericField(
             ),
             shape = RoundedCornerShape(8.dp),
         )
+    }
+}
+
+/**
+ * Dropdown selector for settings.
+ */
+@Composable
+fun SettingsDropdown(
+    label: String,
+    value: String,
+    options: List<String>,
+    displayOptions: List<String> = options,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val currentIndex = options.indexOf(value).coerceAtLeast(0)
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextSecondary,
+            modifier = Modifier.width(130.dp)
+        )
+
+        Box(modifier = Modifier.weight(1f)) {
+            OutlinedButton(
+                onClick = { expanded = true },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                border = BorderStroke(1.dp, Border)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = displayOptions.getOrElse(currentIndex) { value },
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Icon(
+                        Icons.Default.ArrowDropDown,
+                        contentDescription = null,
+                        tint = Accent
+                    )
+                }
+            }
+
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.background(Surface)
+            ) {
+                options.forEachIndexed { index, option ->
+                    DropdownMenuItem(
+                        text = { Text(displayOptions[index], color = TextPrimary) },
+                        onClick = {
+                            onValueChange(option)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
     }
 }
 

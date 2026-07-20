@@ -5,17 +5,22 @@ package com.universaldownloader.data.model
  * Replaces the TqdmProgressHook from the desktop version.
  */
 data class DownloadProgress(
+    val url: String = "",
     val filename: String = "",
     val downloadedBytes: Long = 0,
     val totalBytes: Long = 0,
     val speed: Double? = null,
     val eta: Int? = null,
-    val status: DownloadStatus = DownloadStatus.IDLE
+    val status: DownloadStatus = DownloadStatus.IDLE,
+    val isAudioOnly: Boolean = false,
+    val formatId: String? = null
 )
 
 enum class DownloadStatus {
     IDLE,
+    WAITING,
     DOWNLOADING,
+    PAUSED,
     FINISHED,
     ERROR,
     CANCELLED

@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.io.File
 import android.net.Uri
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Repository coordinating downloads between the UI and engine layers.
@@ -25,6 +26,9 @@ class DownloadRepository(
 ) {
     /** Observable download session state. */
     val sessionState: StateFlow<DownloadSessionState> = engine.sessionState
+
+    // Centralized tracker to ensure multiple workers (Batch + Resume) don't conflict
+    private val processedFiles = ConcurrentHashMap.newKeySet<String>()
 
     /**
      * Start downloading all links in the given text.
@@ -66,12 +70,8 @@ class DownloadRepository(
 
         val effectiveSettings = settings.copy(downloadDir = effectiveDownloadDir)
 
-        // Robust Concurrency Tracker: Keep track of which files we've already moved
-        val processedFiles = mutableSetOf<String>()
-
         // Launch a collector to move files to their final home as they finish
-        var moveJob: kotlinx.coroutines.Job? = null
-        moveJob = scope.launch {
+        val moveJob = scope.launch {
             engine.sessionState.collect { state ->
                 // Check all current results for anything new that needs moving
                 for (result in state.results) {
@@ -79,16 +79,7 @@ class DownloadRepository(
                         val path = result.filePath
                         
                         // Thread-safe check: only move if not already processed
-                        val alreadyProcessed = synchronized(processedFiles) {
-                            if (processedFiles.contains(path)) {
-                                true
-                            } else {
-                                processedFiles.add(path)
-                                false
-                            }
-                        }
-                        
-                        if (alreadyProcessed) continue
+                        if (!processedFiles.add(path)) continue
                         
                         val sourceFile = File(path)
                         if (sourceFile.exists()) {
@@ -100,10 +91,7 @@ class DownloadRepository(
                                 val moved = FileUtils.moveFileToSafUri(context, sourceFile, finalTargetUri)
                                 if (moved) {
                                     engine.addLog("✅ Saved: ${sourceFile.name}", com.universaldownloader.data.model.LogTag.SUCCESS)
-                                    // Since SAF URIs are tricky to point to directly for playback later,
-                                    // we might still store the name or a placeholder.
-                                    // But for simplicity, we'll try to find the new URI if possible or just use path.
-                                    finalDestination = sourceFile.name // Or keep original path as fallback
+                                    finalDestination = sourceFile.name 
                                 } else {
                                     engine.addLog("❌ Error: Failed to save to chosen folder. Check permissions.", com.universaldownloader.data.model.LogTag.ERROR)
                                 }
@@ -128,8 +116,10 @@ class DownloadRepository(
         }
 
         try {
-            engine.run(links, effectiveSettings, linksFile.absolutePath, scope, formatsMap)
+            engine.run(links, effectiveSettings, linksFile.absolutePath, formatsMap)
         } finally {
+            // Give the collector a moment to finish any last-second moves
+            kotlinx.coroutines.delay(500)
             moveJob.cancel()
         }
     }

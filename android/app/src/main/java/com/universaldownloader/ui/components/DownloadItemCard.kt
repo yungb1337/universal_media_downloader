@@ -1,18 +1,13 @@
 package com.universaldownloader.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -22,22 +17,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.universaldownloader.data.model.DownloadProgress
 import com.universaldownloader.data.model.DownloadResult
-import com.universaldownloader.ui.theme.Background
-import com.universaldownloader.ui.theme.Download
-import com.universaldownloader.ui.theme.Error
-import com.universaldownloader.ui.theme.Success
-import com.universaldownloader.ui.theme.Surface
-import com.universaldownloader.ui.theme.TextPrimary
-import com.universaldownloader.ui.theme.TextSecondary
+import com.universaldownloader.data.model.DownloadStatus
+import com.universaldownloader.ui.theme.*
 import com.universaldownloader.util.Formatters
 
 /**
- * Card showing real-time download progress for a single file.
- * Port of the per-item progress display from desktop gui/widgets.py.
+ * Card showing real-time download progress for a single file with controls.
  */
 @Composable
 fun DownloadItemCard(
     progress: DownloadProgress,
+    onPause: (String) -> Unit,
+    onResume: (String) -> Unit,
+    onStop: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val animatedProgress by animateFloatAsState(
@@ -49,21 +41,47 @@ fun DownloadItemCard(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Surface),
+        colors = CardDefaults.cardColors(
+            containerColor = if (progress.status == DownloadStatus.PAUSED) 
+                Surface.copy(alpha = 0.6f) else Surface
+        ),
         shape = RoundedCornerShape(12.dp),
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Filename
-            Text(
-                text = progress.filename.ifBlank { "Downloading..." },
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Filename
+                Text(
+                    text = progress.filename.ifBlank { "Downloading..." },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (progress.status == DownloadStatus.PAUSED) 
+                        TextPrimary.copy(alpha = 0.6f) else TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+
+                // Controls
+                Row {
+                    if (progress.status == DownloadStatus.PAUSED) {
+                        IconButton(onClick = { onResume(progress.url) }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = "Resume", tint = Accent)
+                        }
+                    } else {
+                        IconButton(onClick = { onPause(progress.url) }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Pause, contentDescription = "Pause", tint = Accent)
+                        }
+                    }
+                    IconButton(onClick = { onStop(progress.url) }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Stop, contentDescription = "Stop & Delete", tint = com.universaldownloader.ui.theme.Error)
+                    }
+                }
+            }
 
             // Progress bar
             LinearProgressIndicator(
@@ -72,16 +90,16 @@ fun DownloadItemCard(
                     .fillMaxWidth()
                     .height(6.dp)
                     .clip(RoundedCornerShape(3.dp)),
-                color = Download,
+                color = if (progress.status == DownloadStatus.PAUSED) 
+                    Panel else Download,
                 trackColor = Background,
             )
 
-            // Stats row: size, speed, ETA
+            // Stats row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Downloaded / Total
                 Text(
                     text = buildString {
                         append(Formatters.formatFileSize(progress.downloadedBytes))
@@ -89,27 +107,29 @@ fun DownloadItemCard(
                             append(" / ")
                             append(Formatters.formatFileSize(progress.totalBytes))
                         }
+                        if (progress.status == DownloadStatus.PAUSED) {
+                            append(" (Paused)")
+                        }
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )
 
-                // Speed
-                progress.speed?.let { speed ->
-                    Text(
-                        text = "${Formatters.formatFileSize(speed.toLong())}/s",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Download
-                    )
-                }
-
-                // ETA
-                progress.eta?.let { eta ->
-                    Text(
-                        text = "ETA: ${Formatters.formatDuration(eta.toDouble())}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
+                if (progress.status != DownloadStatus.PAUSED) {
+                    progress.speed?.let { speed ->
+                        Text(
+                            text = "${Formatters.formatFileSize(speed.toLong())}/s",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Download
+                        )
+                    }
+                    progress.eta?.let { eta ->
+                        Text(
+                            text = "ETA: ${Formatters.formatDuration(eta.toDouble())}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    }
                 }
             }
         }
@@ -127,7 +147,7 @@ fun DownloadResultCard(
     val (icon, color) = when {
         result.skipped -> "⏭️" to TextSecondary
         result.success -> "✅" to Success
-        else -> "❌" to Error
+        else -> "❌" to com.universaldownloader.ui.theme.Error
     }
 
     Card(
@@ -155,7 +175,7 @@ fun DownloadResultCard(
                     Text(
                         text = result.error,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Error,
+                        color = com.universaldownloader.ui.theme.Error,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )

@@ -15,5 +15,7 @@ data class DownloadResult(
     val skipped: Boolean = false,
     val lineNumber: Int = 0,
     val thumbnail: String? = null,
-    val quality: String? = null
+    val quality: String? = null,
+    val isPaused: Boolean = false,
+    val isStopped: Boolean = false
 )

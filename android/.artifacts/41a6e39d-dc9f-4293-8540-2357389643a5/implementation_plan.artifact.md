@@ -1,49 +1,40 @@
-# Implementation Plan - Fixing Pause/Resume "Crash" and Improving Stability
+# Implementation Plan - Fixing File Saving and Resume Reliability
 
-The current implementation of Pause/Resume is functional but leads to a poor user experience. When a download is paused, it is treated as a terminal failure by the `DownloadEngine`, causing it to be removed from the active downloads list and counted as a "Failed" job in the summary. This makes the app appear to "crash" or fail when it is actually performing a requested pause.
+The current issues (files not saving to MediaStore and Resume "not working") are caused by a synchronization mismatch and redundant processing logic. The `DownloadEngine.run` function returns immediately, causing background workers to die prematurely, and multiple workers (Batch + Resume) can sometimes conflict when trying to move the same file.
 
 ## User Review Required
 
 > [!IMPORTANT]
-> **Persistent State**: The "Paused" state will be kept in memory within the `DownloadSessionState`. If the app is force-closed or the system kills the background process, this in-memory paused state will be lost. We are prioritizing fixing the active session behavior first.
+> **Wait for Completion**: I will change `DownloadEngine.run` to be a synchronous suspend function. This ensures that the Background Worker and the File Mover stay alive until the downloads are actually finished and moved to your Downloads folder.
+>
+> **Centralized Moving**: I will move the "File Moving" logic to be a shared state in the Repository. This prevents a "Resume" worker and a "Batch" worker from trying to move the same file at the same time, which can cause "File not found" errors.
 
 ## Proposed Changes
 
-### Core Models & Bridge
-
-#### [MODIFY] [DownloadResult.kt](file:///C:/Users/Asus/Downloads/universal_downloader/android/app/src/main/java/com/universaldownloader/data/model/DownloadResult.kt)
-- Add `isPaused: Boolean` and `isStopped: Boolean` fields to differentiate user-initiated stops from actual errors.
-
-#### [MODIFY] [PythonBridge.kt](file:///C:/Users/Asus/Downloads/universal_downloader/android/app/src/main/java/com/universaldownloader/engine/PythonBridge.kt)
-- Update `parseDownloadResult` to populate the new `isPaused` and `isStopped` flags from the JSON returned by the Python bridge.
-
-### Engine Logic
-
+### 1. Fix Engine Synchronization
 #### [MODIFY] [DownloadEngine.kt](file:///C:/Users/Asus/Downloads/universal_downloader/android/app/src/main/java/com/universaldownloader/engine/DownloadEngine.kt)
-- **Status Persistence**: In `downloadSingle`, if a download is paused, update its entry in `currentProgress` to `DownloadStatus.PAUSED` instead of removing it.
-- **Summary Logic**: Update `printSummary` to exclude paused and stopped items from the "Failed" count and add a "Paused" count to the summary output.
-- **Log Suppression**: Prevent the "❌ Failed" log from appearing when a download is merely paused or stopped by the user.
+- Remove `scope.launch` from the `run` function.
+- Make `run` a standard `suspend` function that waits for `runParallel` or `runSequential` to complete.
+- This ensures the caller (Worker) stays active during the entire download process.
 
-### Worker & Service
+### 2. Centralized File Mover
+#### [MODIFY] [DownloadRepository.kt](file:///C:/Users/Asus/Downloads/universal_downloader/android/app/src/main/java/com/universaldownloader/data/repository/DownloadRepository.kt)
+- Move `processedFiles` from a local variable to a class-level `ConcurrentHashMap`.
+- This ensures that if a file is moved by one worker (e.g., a Resume task), another worker won't try to move it again.
+- Move the `moveJob` collector into a more stable lifecycle or ensure it's properly joined.
 
-#### [MODIFY] [DownloadWorker.kt](file:///C:/Users/Asus/Downloads/universal_downloader/android/app/src/main/java/com/universaldownloader/service/DownloadWorker.kt)
-- Ensure the worker returns `Result.success()` even if the batch contains paused items, preventing system-level "Worker failed" messages.
+### 3. Resume Parameter Alignment
+#### [MODIFY] [DownloadViewModel.kt](file:///C:/Users/Asus/Downloads/universal_downloader/android/app/src/main/java/com/universaldownloader/ui/viewmodel/DownloadViewModel.kt)
+- Ensure `resumeJob` correctly triggers the worker and provides all necessary context.
 
 ## Verification Plan
 
-### Automated Tests
-- N/A (Manual verification on device is more effective for this UI/State flow).
-
 ### Manual Verification
-1.  **Pause Test**: Start a download, click "Pause".
-    - Verify: The item stays in the "Active Downloads" list.
-    - Verify: The status changes to "(Paused)".
-    - Verify: The "Resume" (Play) button appears.
-    - Verify: The logs show "⏸️ Paused" and NOT "❌ Failed".
-2.  **Resume Test**: Click "Resume" on the paused item.
-    - Verify: The download picks up from the previous percentage (using `.part` files).
+1.  **Direct Download Test**: Start a fresh download.
+    - Verify: After 100%, the logs show "📂 Saving to Public Downloads...".
+    - Verify: The file appears in `Downloads/Universal Downloader`.
+2.  **Pause/Resume Test**: Start a download, pause it at 50%, then resume.
     - Verify: The status changes back to "Downloading".
-3.  **Batch Pause**: Start 3 downloads. Pause the first one.
-    - Verify: The engine continues to the second and third downloads while the first remains in the list as "Paused".
-4.  **Summary Test**: Finish a batch with one paused item.
-    - Verify: The summary shows "1 paused" and "0 failed".
+    - Verify: Upon completion, the file is moved to the public folder.
+3.  **Conflict Test**: Start a batch of 5. Pause 1. Let the others finish. Resume the 1st one while the others are being saved.
+    - Verify: No "File not found" errors in the logs; each file is moved exactly once.

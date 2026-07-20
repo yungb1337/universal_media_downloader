@@ -278,20 +278,6 @@ fun HomeScreen(
                                     )
                                 }
                             }
-
-                            IconButton(
-                                onClick = { viewModel.stopDownload() },
-                                enabled = state.isRunning,
-                                modifier = Modifier
-                                    .height(48.dp)
-                                    .padding(horizontal = 4.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Stop,
-                                    contentDescription = "Stop",
-                                    tint = if (state.isRunning) Error else Panel
-                                )
-                            }
                         }
                     }
                 }
@@ -308,7 +294,12 @@ fun HomeScreen(
                 }
 
                 items(state.currentProgress.values.toList()) { progress ->
-                    DownloadItemCard(progress = progress)
+                    DownloadItemCard(
+                        progress = progress,
+                        onPause = { viewModel.pauseJob(it) },
+                        onResume = { viewModel.resumeJob(it, settings) },
+                        onStop = { viewModel.stopJob(it) }
+                    )
                 }
             }
 

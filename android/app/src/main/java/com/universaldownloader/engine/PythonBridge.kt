@@ -7,7 +7,7 @@ import com.universaldownloader.data.model.PlaylistEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -19,17 +19,39 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class PythonBridge {
 
+    enum class JobState {
+        RUNNING,
+        PAUSED,
+        STOPPED
+    }
+
     companion object {
-        private val _shouldCancel = AtomicBoolean(false)
+        private val _shouldCancelGlobal = AtomicBoolean(false)
+        private val _urlStates = ConcurrentHashMap<String, JobState>()
 
         @JvmStatic
-        fun setCancel(cancel: Boolean) {
-            _shouldCancel.set(cancel)
+        fun setCancelGlobal(cancel: Boolean) {
+            _shouldCancelGlobal.set(cancel)
         }
 
         @JvmStatic
-        fun isCancelled(): Boolean {
-            return _shouldCancel.get()
+        fun isCancelledGlobal(): Boolean {
+            return _shouldCancelGlobal.get()
+        }
+
+        @JvmStatic
+        fun setJobState(url: String, state: JobState) {
+            _urlStates[url] = state
+        }
+
+        @JvmStatic
+        fun getJobState(url: String): String {
+            return (_urlStates[url] ?: JobState.RUNNING).name
+        }
+
+        @JvmStatic
+        fun removeJobState(url: String) {
+            _urlStates.remove(url)
         }
     }
 
@@ -68,7 +90,8 @@ class PythonBridge {
         audioQuality: String? = null,
         onProgress: ((String) -> Unit)? = null
     ): DownloadResult = withContext(Dispatchers.IO) {
-        setCancel(false)
+        setCancelGlobal(false)
+        setJobState(url, JobState.RUNNING)
         val ffmpegPath = getFFmpegPath()
 
         val listener = onProgress?.let { callback ->
@@ -191,7 +214,9 @@ class PythonBridge {
                 thumbnail = if (obj.has("thumbnail") && !obj.isNull("thumbnail"))
                     obj.getString("thumbnail") else null,
                 quality = if (obj.has("quality") && !obj.isNull("quality"))
-                    obj.getString("quality") else null
+                    obj.getString("quality") else null,
+                isPaused = obj.optBoolean("paused", false),
+                isStopped = obj.optBoolean("stopped", false)
             )
         } catch (e: Exception) {
             DownloadResult(

@@ -17,6 +17,7 @@ This file serves as the "source of truth" for the project's progress and technic
 - **Background Robustness (WorkManager)**: Migrated download logic to WorkManager. Downloads now survive app swipes and system sleep states.
 - **Visual UI & UX**:
     - **Thumbnails**: Integrated **Coil** for video thumbnails in the history and analysis lists.
+    - **Individual Controls**: Replaced global stop with per-item **Pause/Resume** and **Stop (Dump)** controls.
     - **Quick Audio**: Dedicated **"Audio" button** on the Home Screen for one-tap MP3/M4A grabs.
     - **Smart Clipboard**: Automatically detects YouTube/Instagram links in the clipboard and suggests a quick paste.
     - **Clean Labels**: All technical resolution strings (e.g., 1080x1080) are cleaned into user-friendly "p" format (1080p).

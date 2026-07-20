@@ -12,7 +12,6 @@ import com.universaldownloader.util.Formatters
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -20,11 +19,11 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -40,9 +39,9 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
     private val _sessionState = MutableStateFlow(DownloadSessionState())
     val sessionState: StateFlow<DownloadSessionState> = _sessionState
 
-    private var downloadJob: Job? = null
+    private val activeJobCount = AtomicInteger(0)
 
-    fun isRunning(): Boolean = downloadJob?.isActive == true
+    fun isRunning(): Boolean = activeJobCount.get() > 0
 
     /**
      * Run the download pipeline for all links.
@@ -52,7 +51,6 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
         links: List<LinkEntry>,
         settings: DownloadSettings,
         linksFilePath: String?,
-        scope: CoroutineScope,
         formatsMap: Map<String, String> = emptyMap()
     ) {
         if (links.isEmpty()) {
@@ -79,38 +77,36 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
         }
 
         val startTime = System.currentTimeMillis()
+        activeJobCount.incrementAndGet()
 
-        downloadJob = scope.launch(Dispatchers.IO) {
-            try {
-                if (settings.maxConcurrent > 1) {
-                    addLog("Using ${settings.maxConcurrent} parallel download workers", LogTag.INFO)
-                    runParallel(links, settings, linksFilePath, formatsMap)
-                } else {
-                    runSequential(links, settings, linksFilePath, formatsMap)
-                }
-            } catch (e: CancellationException) {
-                addLog("⚠️  Download batch cancelled", LogTag.WARNING)
-                throw e
-            } catch (e: Exception) {
-                val friendlyError = toFriendlyError(e.message ?: "Unknown engine error")
-                addLog("❌ $friendlyError", LogTag.ERROR)
-            } finally {
-                val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
-                printSummary(elapsed)
-                // Only mark as not running if this was the last active job
-                // Since we only have one downloadJob at a time currently, this is fine.
+        try {
+            _sessionState.update { it.copy(isRunning = true) }
+            if (settings.maxConcurrent > 1) {
+                addLog("Using ${settings.maxConcurrent} parallel download workers", LogTag.INFO)
+                runParallel(links, settings, linksFilePath, formatsMap)
+            } else {
+                runSequential(links, settings, linksFilePath, formatsMap)
+            }
+        } catch (e: CancellationException) {
+            addLog("⚠️  Download batch cancelled", LogTag.WARNING)
+            throw e
+        } catch (e: Exception) {
+            val friendlyError = toFriendlyError(e.message ?: "Unknown engine error")
+            addLog("❌ $friendlyError", LogTag.ERROR)
+        } finally {
+            val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
+            printSummary(elapsed)
+            
+            if (activeJobCount.decrementAndGet() <= 0) {
                 _sessionState.update { it.copy(isRunning = false) }
             }
         }
-
-        downloadJob?.join()
     }
 
     fun cancel() {
-        PythonBridge.setCancel(true)
-        downloadJob?.cancel()
+        PythonBridge.setCancelGlobal(true)
         _sessionState.update { it.copy(isRunning = false) }
-        addLog("⏹  Download stopped by user.", LogTag.WARNING)
+        addLog("⏹  Global stop signal sent.", LogTag.WARNING)
     }
 
     /** Clear log entries. */
@@ -187,6 +183,19 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
             else -> false // Any other specific ID means we chose a Video format
         }
 
+        // Initialize progress for this URL (preserving existing if resuming)
+        _sessionState.update { state ->
+            val existing = state.currentProgress[link.url]
+            val progress = DownloadProgress(
+                url = link.url,
+                filename = existing?.filename ?: link.customName ?: "Preparing...",
+                status = DownloadStatus.DOWNLOADING,
+                isAudioOnly = effectiveAudioOnly,
+                formatId = formatId
+            )
+            state.copy(currentProgress = state.currentProgress + (link.url to progress))
+        }
+
         return try {
             pythonBridge.downloadUrl(
                 url = link.url,
@@ -200,7 +209,7 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
                 audioFormat = settings.audioFormat,
                 audioQuality = settings.audioQuality,
                 onProgress = { progressJson ->
-                    handleProgress(progressJson)
+                    handleProgress(link.url, progressJson)
                 }
             ).copy(lineNumber = link.lineNumber)
         } catch (e: CancellationException) {
@@ -213,24 +222,48 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
                 lineNumber = link.lineNumber
             )
         }.also { result ->
-            if (result.success && !result.skipped) {
-                addLog("✅ Saved: ${result.title ?: result.url}", LogTag.SUCCESS)
-                if (result.quality != null) {
-                    addLog("   Quality: ${result.quality}", LogTag.INFO)
+            val isPaused = result.isPaused
+            val isStopped = result.isStopped
+
+            if (isPaused) {
+                _sessionState.update { state ->
+                    val currentProgress = state.currentProgress[link.url]
+                    // RACE CONDITION GUARD: Only set to PAUSED if it hasn't been RESUMED (Downloading) already
+                    if (currentProgress != null && currentProgress.status != DownloadStatus.DOWNLOADING) {
+                        state.copy(
+                            currentProgress = state.currentProgress + (link.url to currentProgress.copy(status = DownloadStatus.PAUSED))
+                        )
+                    } else {
+                        state
+                    }
                 }
-            } else if (result.skipped) {
-                addLog("⏭️  Already downloaded: ${result.title ?: result.url}", LogTag.INFO)
+                addLog("⏸️  Paused: ${result.title ?: link.url}", LogTag.WARNING)
             } else {
-                addLog("❌ Failed: ${result.title ?: result.url}", LogTag.ERROR)
-                val friendlyError = toFriendlyError(result.error ?: "Unknown error")
-                addLog("   $friendlyError", LogTag.ERROR)
+                _sessionState.update { state ->
+                    state.copy(currentProgress = state.currentProgress - link.url)
+                }
+                
+                if (isStopped) {
+                    addLog("⏹️  Stopped: ${result.title ?: link.url}", LogTag.WARNING)
+                } else if (result.success && !result.skipped) {
+                    addLog("✅ Saved: ${result.title ?: result.url}", LogTag.SUCCESS)
+                    if (result.quality != null) {
+                        addLog("   Quality: ${result.quality}", LogTag.INFO)
+                    }
+                } else if (result.skipped) {
+                    addLog("⏭️  Already downloaded: ${result.title ?: result.url}", LogTag.INFO)
+                } else {
+                    addLog("❌ Failed: ${result.title ?: result.url}", LogTag.ERROR)
+                    val friendlyError = toFriendlyError(result.error ?: "Unknown error")
+                    addLog("   $friendlyError", LogTag.ERROR)
+                }
             }
         }
     }
 
     // ── Progress handling ────────────────────────────────────────────────────
 
-    private fun handleProgress(progressJson: String) {
+    private fun handleProgress(url: String, progressJson: String) {
         try {
             val obj = JSONObject(progressJson)
             val filename = obj.optString("filename", "")
@@ -239,6 +272,7 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
             when (status) {
                 "downloading" -> {
                     val progress = DownloadProgress(
+                        url = url,
                         filename = filename,
                         downloadedBytes = obj.optLong("downloaded", 0),
                         totalBytes = obj.optLong("total", 0),
@@ -250,16 +284,12 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
                     )
                     _sessionState.update { state ->
                         state.copy(
-                            currentProgress = state.currentProgress + (filename to progress)
+                            currentProgress = state.currentProgress + (url to progress)
                         )
                     }
                 }
                 "finished", "error" -> {
-                    _sessionState.update { state ->
-                        state.copy(
-                            currentProgress = state.currentProgress - filename
-                        )
-                    }
+                    // Handled in downloadSingle finally/also block
                 }
             }
         } catch (_: Exception) {
@@ -272,8 +302,10 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
     private fun printSummary(elapsedSeconds: Double) {
         val results = _sessionState.value.results
         val succeeded = results.count { it.success && !it.skipped }
-        val failed = results.count { !it.success }
         val skipped = results.count { it.skipped }
+        val paused = results.count { it.isPaused }
+        val stopped = results.count { it.isStopped }
+        val failed = results.count { !it.success && !it.isPaused && !it.isStopped }
         val totalSize = results.sumOf { it.fileSizeBytes }
 
         addLog("", LogTag.INFO)
@@ -281,6 +313,8 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
         addLog("  DOWNLOAD SUMMARY", LogTag.INFO)
         addLog("═".repeat(50), LogTag.INFO)
         addLog("  ✅ $succeeded succeeded", LogTag.SUCCESS)
+        if (paused > 0) addLog("  ⏸️  $paused paused", LogTag.WARNING)
+        if (stopped > 0) addLog("  ⏹️  $stopped stopped", LogTag.WARNING)
         addLog("  ❌ $failed failed", LogTag.ERROR)
         addLog("  ⏭️  $skipped skipped (already downloaded)", LogTag.INFO)
         addLog("  📦 Total size: ${Formatters.formatFileSize(totalSize)}", LogTag.INFO)
@@ -289,7 +323,7 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
         if (failed > 0) {
             addLog("─".repeat(50), LogTag.INFO)
             addLog("  Failed downloads:", LogTag.ERROR)
-            results.filter { !it.success }.forEach { r ->
+            results.filter { !it.success && !it.isPaused && !it.isStopped }.forEach { r ->
                 val display = (r.title ?: r.url).let {
                     if (it.length > 45) it.take(42) + "..." else it
                 }
@@ -348,6 +382,10 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
     }
 
     private fun addResult(result: DownloadResult) {
-        _sessionState.update { it.copy(results = it.results + result) }
+        _sessionState.update { state ->
+            // Deduplicate results: if same URL exists, replace it (preferring success/failure over paused)
+            val filtered = state.results.filterNot { it.url == result.url }
+            state.copy(results = filtered + result)
+        }
     }
 }

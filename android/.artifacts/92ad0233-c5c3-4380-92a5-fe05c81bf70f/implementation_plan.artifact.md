@@ -1,50 +1,50 @@
-# Implementation Plan - Rebuilding "Analyze" from Scratch
+# Implementation Plan - Individual Download Controls (Pause/Resume/Stop)
 
-This plan removes the buggy existing analysis logic and implements a clean, robust "Deep Analysis" system from the ground up.
+This plan replaces the global stop button with per-item controls in the active downloads list, allowing you to manage each download independently.
 
 ## User Review Required
 
 > [!IMPORTANT]
-> **Performance Trade-off**: Rebuilding this feature to show quality for *every* video in a playlist means we must perform a "Deep Extraction." This will take ~2-3 seconds per video. I will limit the initial scan to the first **20 videos** to keep the app responsive.
+> **Pause/Resume Behavior**: Since the Python engine (`yt-dlp`) doesn't have a native "suspend" mode, "Pause" will stop the current download process while keeping the partial data (`.part` files). "Resume" will start a new process that intelligently picks up where it left off.
 
-> [!TIP]
-> **The Goal**: Every item in the list will have its own dropdown, pre-selected to **1080p** (or the next best thing), with a clear option to switch to **"High Quality Audio"** instead.
+> [!WARNING]
+> **Stop/Dump Behavior**: Clicking "Stop" on an individual item will cancel the download and **strictly delete** all temporary and partial files associated with that specific video from your storage.
 
 ## Proposed Changes
 
-### 1. New Python Core
+### 1. Data Model Enhancements
+#### [MODIFY] [DownloadState.kt](file:///C:/Users/Asus/Downloads/universal_downloader/android/app/src/main/java/com/universaldownloader/data/model/DownloadState.kt)
+- Add `PAUSED` and `WAITING` statuses to `DownloadStatus`.
+- Update `DownloadProgress` to include the `url` so the UI can identify which task to control.
+
+### 2. Job-Aware Control System
+#### [MODIFY] [PythonBridge.kt](file:///C:/Users/Asus/Downloads/universal_downloader/android/app/src/main/java/com/universaldownloader/engine/PythonBridge.kt)
+- Replace the global `_shouldCancel` with a **Thread-Safe Map**: `urlStates: Map<String, JobState>`.
+- Add methods: `setJobState(url, state)`, `getJobState(url)`.
+
 #### [MODIFY] [download_bridge.py](file:///C:/Users/Asus/Downloads/universal_downloader/android/app/src/main/python/download_bridge.py)
-- **Delete** the old `get_playlist_info`.
-- **Implement** a new version that:
-  - Detects Single Video vs. Playlist.
-  - For each item, scans all `formats`.
-  - Cleans labels: Replaces `1920x1080` with `1080p`.
-  - Categorizes into `video` and `audio` types.
-  - Returns a clean, flat JSON structure.
+- Update `progress_hook` to check the status of its specific URL via the new bridge methods.
+- If status is `STOPPED`, it will raise a `StopException` and the script will perform an immediate cleanup of `.part` files.
+- If status is `PAUSED`, it will raise a `PauseException` to exit cleanly and preserve fragments.
 
-### 2. Smart "Brain" in ViewModel
+### 3. UI Redesign
+#### [MODIFY] [DownloadItemCard.kt](file:///C:/Users/Asus/Downloads/universal_downloader/android/app/src/main/java/com/universaldownloader/ui/components/DownloadItemCard.kt)
+- Add a new **Control Row** inside the card:
+    - **⏸️/▶️ Toggle**: Switches between Pause and Resume.
+    - **⏹️ Stop**: Cancels and deletes the file.
+- Add visual indicators for "Paused" state (dimmed progress bar).
+
+### 4. ViewModel Logic
 #### [MODIFY] [DownloadViewModel.kt](file:///C:/Users/Asus/Downloads/universal_downloader/android/app/src/main/java/com/universaldownloader/ui/viewmodel/DownloadViewModel.kt)
-- **New Selection Algorithm**:
-  1. Priority 1: Find a video format containing `1080p`.
-  2. Priority 2: Find the highest video format where height < 1080.
-  3. Priority 3: Fallback to the very best available video.
-- This will run automatically as soon as the results come in.
-
-### 3. Fresh UI Component
-#### [MODIFY] [PlaylistSelectionDialog.kt](file:///C:/Users/Asus/Downloads/universal_downloader/android/app/src/main/java/com/universaldownloader/ui/components/PlaylistSelectionDialog.kt)
-- **Rewrite from scratch** to ensure the dropdown is always present.
-- Each list item will feature:
-  - Thumbnail (if available).
-  - Title.
-  - **Quality Selector**: A button that opens a grouped dropdown.
-  - **Grouped Options**: `--- 🎬 Video ---` and `--- 🎵 Audio ---`.
+- Add `pauseDownload(url)`, `resumeDownload(url)`, and `stopDownload(url)` methods.
+- `resumeDownload` will re-trigger the `DownloadWorker` for just that specific URL.
 
 ---
 
 ## Verification Plan
 
 ### Manual Verification
-1.  **Playlist Rebuild Test**: Paste a playlist. Verify that *every* item has its own dropdown immediately.
-2.  **Smart Default Test**: Verify that YouTube videos default to 1080p automatically.
-3.  **Mixed Mode Test**: Pick 720p for the first video and "Audio Only" for the second. Verify both download correctly.
-4.  **Filename Test**: Verify that the "File name too long" fix still works with this new logic.
+1.  **Individual Pause**: Start 2 downloads. Pause the first one. Verify the second one continues while the first one stays at its current percentage.
+2.  **Individual Resume**: Click Resume on the paused download. Verify it starts from the previous percentage (resuming fragments).
+3.  **Stop & Wipe**: Click Stop on a download. Verify the item disappears from the active list and check with a file manager that no `.part` files remain in `cache/download_work`.
+4.  **Global App Closure**: Verify that swiping the app away still allows these controls to work via the WorkManager once the app is reopened.

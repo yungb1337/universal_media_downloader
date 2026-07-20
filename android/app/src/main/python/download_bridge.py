@@ -104,19 +104,26 @@ def build_format_string(highest_res, audio_only):
 
 # ── yt-dlp options builder (ported from YtDlpBackend._build_ydl_opts) ────────
 
-def build_ydl_opts(output_template, format_string, cookies_file=None,
+class PauseException(Exception): pass
+class StopException(Exception): pass
+
+def build_ydl_opts(url, output_template, format_string, cookies_file=None,
                    ffmpeg_path=None, audio_only=False, audio_format="m4a",
                    audio_quality="320", progress_listener=None):
     """
     Build yt-dlp options dict.
-
-    The progress_listener is a Java object (passed from Kotlin via Chaquopy)
-    with an onProgress(String) method that receives JSON progress updates.
     """
 
     def progress_hook(d):
-        if PythonBridge.isCancelled():
+        if PythonBridge.isCancelledGlobal():
             raise RuntimeError("Download cancelled by user")
+
+        # Per-Job Check
+        job_state = PythonBridge.getJobState(url)
+        if job_state == "PAUSED":
+            raise PauseException("Download paused by user")
+        if job_state == "STOPPED":
+            raise StopException("Download stopped and removed by user")
 
         if progress_listener is None:
             return
@@ -458,7 +465,7 @@ def download_url(url, output_dir, highest_res, audio_only,
         try:
             # Rebuild opts each attempt for clean progress hooks
             ydl_opts = build_ydl_opts(
-                template, format_string,
+                url, template, format_string,
                 cookies_file=cookies_file,
                 ffmpeg_path=ffmpeg_path,
                 audio_only=audio_only,
@@ -481,6 +488,8 @@ def download_url(url, output_dir, highest_res, audio_only,
                 if final_path and Path(final_path).exists():
                     elapsed = time.time() - start_time
                     fsize = Path(final_path).stat().st_size
+                    # Cleanup job state after success
+                    PythonBridge.removeJobState(url)
                     return json.dumps({
                         "url": url,
                         "success": True,
@@ -494,6 +503,33 @@ def download_url(url, output_dir, highest_res, audio_only,
                     })
                 else:
                     raise RuntimeError("Download completed but file not found")
+
+        except PauseException:
+            # Clean exit, keep part files
+            return json.dumps({
+                "url": url,
+                "success": False,
+                "error": "Paused",
+                "paused": True,
+                "duration_seconds": time.time() - start_time,
+            })
+
+        except StopException:
+            # Cleanup part files and exit
+            try:
+                # Basic cleanup: look for files containing video_id and ending in .part
+                if video_id:
+                    for f in Path(output_dir).glob("*{}*.part*".format(video_id)):
+                        f.unlink(missing_ok=True)
+            except: pass
+            PythonBridge.removeJobState(url)
+            return json.dumps({
+                "url": url,
+                "success": False,
+                "error": "Stopped",
+                "stopped": True,
+                "duration_seconds": time.time() - start_time,
+            })
 
         except Exception as e:
             last_error = str(e)
@@ -514,6 +550,8 @@ def download_url(url, output_dir, highest_res, audio_only,
             break
 
     elapsed = time.time() - start_time
+    # Cleanup job state on failure
+    PythonBridge.removeJobState(url)
     return json.dumps({
         "url": url,
         "success": False,

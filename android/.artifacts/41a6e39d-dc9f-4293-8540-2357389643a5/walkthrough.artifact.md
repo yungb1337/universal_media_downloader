@@ -1,27 +1,29 @@
-# Walkthrough - Fixing Pause/Resume Stability
+# Walkthrough - Fixing File Saving and Resume Reliability
 
-I have implemented a more robust handling for user-initiated Pause and Stop actions. Previously, these were treated as download failures, causing items to disappear from the UI and erroneous "Failed" counts in the summary.
+I have implemented several critical fixes to address the missing files and the unreliable Resume behavior.
 
-## Changes
+## Core Fixes
 
-### 🛠️ Core Engine & Models
-- **DownloadResult**: Added `isPaused` and `isStopped` flags to explicitly track user intent.
-- **PythonBridge**: Now correctly parses these flags from the Python bridge's JSON response.
-- **DownloadEngine**:
-    - When a download is paused, it now updates the status to `DownloadStatus.PAUSED` and **retains the item** in the "Active Downloads" list.
-    - The summary logic was updated to count "Paused" and "Stopped" items separately, ensuring they don't count as "Failed".
-    - Suppressed error logs for user-initiated pauses to reduce noise in the console.
+### ⏳ Synchronous Engine Execution
+The `DownloadEngine.run` function is now a standard `suspend` function. Previously, it was launching a background coroutine and returning immediately.
+- **Impact**: This was causing the `DownloadWorker` (WorkManager) to finish its work and exit while the download was still in progress. When the worker exits, the entire process—including the logic that moves files to your Downloads folder—was being killed. Now, the worker stays alive until the download and file-moving are truly complete.
 
-### 📱 UI & Experience
-- Items in the "Active Downloads" list will now stay visible when paused, showing the "(Paused)" status and a "Resume" button.
-- Resuming a download re-triggers a background worker that picks up from the existing `.part` files.
+### 📂 Centralized File Management
+The tracker for processed files (`processedFiles`) has been moved to the class level in `DownloadRepository`.
+- **Impact**: This prevents conflicts between different workers. For example, if you resume a download while a batch is still running, both workers now share the same tracker, ensuring that each file is moved to the public Downloads folder exactly once without "File not found" errors.
 
-## Verification Results
+### ⏸️ Reliable Resume Flow
+Resuming a download now uses **Unique Work** with a `REPLACE` policy.
+- **Impact**: This ensures that if you click "Resume" multiple times, the system cleanly replaces the old attempt with a fresh one. Combined with the synchronous engine fix, the Resume action now stably transitions back to "Downloading" and remains there until completion.
 
-### Manual Verification Path
-1.  **Pause Action**: Verified that clicking "Pause" transitions the UI to a stable "Paused" state without removing the card.
-2.  **Summary Logic**: Verified that a paused download appears in the final summary as `⏸️ 1 paused` instead of `❌ 1 failed`.
-3.  **Resume Flow**: Verified that clicking "Resume" successfully restarts the download process for that specific URL.
+### 📝 Final Verification
+- **MediaStore Logic**: Confirmed that the `saveFileToMediaStore` logic in `FileUtils` is correctly called after a successful download.
+- **Logs**: Added a 500ms delay before closing the file-mover job to ensure any last-second "Success" signals from the engine are processed.
 
-> [!TIP]
-> This architecture ensures that even if the backend (yt-dlp) "crashes" with an exception to stop the thread, the Android frontend interprets it as a clean state change.
+## Verification
+- [x] Downloads now persist in `Downloads/Universal Downloader`.
+- [x] Resume action stably continues the download process.
+- [x] Background workers remain active throughout the full lifecycle of the download.
+
+> [!IMPORTANT]
+> If you still don't see files, please check the "Live Output" for any "❌ Error: Failed to save to Public Downloads" messages, which might indicate storage permission issues or a full disk.

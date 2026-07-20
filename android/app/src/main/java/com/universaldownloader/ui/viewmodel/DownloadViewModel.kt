@@ -14,6 +14,7 @@ import com.universaldownloader.data.model.DownloadSessionState
 import com.universaldownloader.data.model.PlaylistEntry
 import com.universaldownloader.data.repository.DownloadRepository
 import com.universaldownloader.data.repository.DownloadSettings
+import com.universaldownloader.engine.PythonBridge
 import com.universaldownloader.service.DownloadService
 import com.universaldownloader.util.FileUtils
 import com.universaldownloader.util.Formatters
@@ -286,13 +287,52 @@ class DownloadViewModel(
     }
 
     fun stopDownload() {
-        // 1. Cancel WorkManager job (This stops the Worker and its coroutines)
+        // Global stop
         androidx.work.WorkManager.getInstance(context).cancelUniqueWork("download_work")
-        
-        // 2. Also signal internal engine directly for immediate UI response
         downloadRepository.stopDownload()
-        
-        Toast.makeText(context, "Download stopping...", Toast.LENGTH_SHORT).show()
+        PythonBridge.setCancelGlobal(true)
+        Toast.makeText(context, "Stopping all downloads...", Toast.LENGTH_SHORT).show()
+    }
+
+    fun pauseJob(url: String) {
+        PythonBridge.setJobState(url, PythonBridge.JobState.PAUSED)
+    }
+
+    fun stopJob(url: String) {
+        PythonBridge.setJobState(url, PythonBridge.JobState.STOPPED)
+    }
+
+    fun resumeJob(url: String, settings: DownloadSettings) {
+        // To resume, we re-enqueue the job for this specific URL.
+        // It will automatically pick up where it left off because of .part files.
+        viewModelScope.launch {
+            val currentProgress = sessionState.value.currentProgress[url]
+            val isAudio = currentProgress?.isAudioOnly ?: settings.audioOnly
+            val formatId = currentProgress?.formatId ?: "auto"
+            
+            val formatsMap = mapOf(url to formatId)
+            val formatsJson = org.json.JSONObject(formatsMap).toString()
+
+            val data = androidx.work.Data.Builder()
+                .putString("links_text", url)
+                .putString("formats_json", formatsJson)
+                .putBoolean("force_audio", isAudio)
+                .build()
+
+            val downloadRequest = androidx.work.OneTimeWorkRequestBuilder<com.universaldownloader.service.DownloadWorker>()
+                .setInputData(data)
+                .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                .build()
+
+            // Use Unique Work with APPEND to keep it organized
+            androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
+                "resume_${url.hashCode()}",
+                androidx.work.ExistingWorkPolicy.REPLACE,
+                downloadRequest
+            )
+            
+            PythonBridge.setJobState(url, PythonBridge.JobState.RUNNING)
+        }
     }
 
     fun clearHistory() {

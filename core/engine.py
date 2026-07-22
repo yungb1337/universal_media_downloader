@@ -63,18 +63,15 @@ class DownloadEngine:
         """Download links one by one."""
         for i, link in enumerate(links, start=1):
             logger.info(f"━━━ [{i}/{len(links)}] ━━━")
-            result = self.backend.download(
-                link.url, 
-                line_number=link.line_number, 
+            results = self.backend.download(
+                link.url,
+                line_number=link.line_number,
                 custom_name=link.custom_name
             )
-            self.results.append(result)
+            self.results.extend(results)
 
-            # Mark as done in links.txt if successful
-            if result.success and not result.skipped:
-                mark_done(config.links_file, link.line_number, link.url)
-            elif result.skipped:
-                # Also mark skipped (already downloaded) as done
+            # Mark as done only when ALL entries for this link succeeded
+            if results and all(r.success for r in results):
                 mark_done(config.links_file, link.line_number, link.url)
 
     def _run_parallel(self, links: List[LinkEntry], workers: int):
@@ -82,17 +79,17 @@ class DownloadEngine:
         def _worker(i_link):
             i, link = i_link
             logger.info(f"━━━ [{i}/{len(links)}] ━━━")
-            result = self.backend.download(
-                link.url, 
-                line_number=link.line_number, 
+            results = self.backend.download(
+                link.url,
+                line_number=link.line_number,
                 custom_name=link.custom_name
             )
-            self.results.append(result)
+            self.results.extend(results)
 
-            if result.success:
+            if results and all(r.success for r in results):
                 mark_done(config.links_file, link.line_number, link.url)
 
-            return result
+            return results
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
             list(executor.map(_worker, enumerate(links, start=1)))

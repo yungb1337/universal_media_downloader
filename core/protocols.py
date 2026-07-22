@@ -28,9 +28,12 @@ class DownloadBackend(Protocol):
         url: str,
         line_number: int = 0,
         custom_name: str | None = None,
-    ) -> DownloadResult:
+    ) -> list[DownloadResult]:
         """
-        Download a single URL and return a DownloadResult.
+        Download a URL and return one or more DownloadResults.
+
+        Most URLs produce a single result.  Playlist URLs produce
+        one result per entry — the engine handles this transparently.
 
         Args:
             url:          The URL to download.
@@ -38,6 +41,7 @@ class DownloadBackend(Protocol):
             custom_name:  Optional override for the output filename.
 
         Returns:
-            A DownloadResult capturing success/failure, path, timing, etc.
+            A list of DownloadResult(s) capturing success/failure, path,
+            timing, etc. for each individual item downloaded.
         """
         ...

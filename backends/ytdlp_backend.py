@@ -1,6 +1,5 @@
 import os
 import time
-import traceback
 from pathlib import Path
 from typing import Optional
 
@@ -62,7 +61,7 @@ class TqdmProgressHook:
 class YtDlpBackend:
     """
     Universal download backend powered by yt-dlp.
-    
+
     Handles format selection, cookies, retries, and progress reporting.
     Works across all 1700+ sites yt-dlp supports without any hardcoding.
     """
@@ -70,24 +69,16 @@ class YtDlpBackend:
     def _build_format_string(self) -> str:
         """
         Builds a universal format selection string with graceful fallbacks.
-        
+
         yt-dlp's format selectors are site-agnostic — the '/' separator
         defines a fallback chain that yt-dlp walks through automatically.
         """
         if config.audio_only:
-            # Audio extraction is handled via postprocessor, not format string.
-            # We request the best audio stream available.
             return "bestaudio/best"
 
         if config.highest_res:
-            # No resolution cap — grab the absolute best
             return "bestvideo+bestaudio/best"
 
-        # 1080p cap with 4-level fallback:
-        #   1. Separate video (≤1080p) + best audio → merge into mp4
-        #   2. Video-only ≤1080p (if no audio split available)
-        #   3. Best combined format ≤1080p (pre-muxed)
-        #   4. Whatever is available (for sites with weird formats)
         return (
             "bestvideo[height<=1080]+bestaudio"
             "/bestvideo[height<=1080]"
@@ -107,23 +98,16 @@ class YtDlpBackend:
             "noprogress": True,
             "progress_hooks": [progress_hook],
             "ignoreerrors": False,
-            # Embed metadata for better file organization
             "writethumbnail": False,
-            # Windows compatibility
             "windowsfilenames": True,
-            # Use curl_cffi to impersonate Chrome's TLS fingerprint.
-            # This bypasses SSL errors and bot detection on strict sites.
             "impersonate": ImpersonateTarget(client="chrome"),
-            # Retry options to handle intermittent connection drops
             "retries": 10,
             "fragment_retries": 10,
         }
 
-        # Merge output format (only for video, not audio-only)
         if not config.audio_only:
             opts["merge_output_format"] = "mp4"
 
-        # Audio-only: extract to MP3 320kbps
         if config.audio_only:
             opts["postprocessors"] = [{
                 "key": "FFmpegExtractAudio",
@@ -131,7 +115,6 @@ class YtDlpBackend:
                 "preferredquality": "320",
             }]
 
-        # Cookie injection for bot bypass
         if config.cookies_from_browser:
             opts["cookiesfrombrowser"] = (config.cookies_from_browser,)
         elif config.cookies_file:
@@ -140,10 +123,7 @@ class YtDlpBackend:
         return opts
 
     def _check_already_downloaded(self, video_id: str | None) -> Path | None:
-        """
-        Checks if a file with this video ID already exists in the download dir.
-        Returns the path if found, None otherwise.
-        """
+        """Check if a file with this video ID already exists in the download dir."""
         if not video_id:
             return None
 
@@ -152,25 +132,22 @@ class YtDlpBackend:
                 return f
         return None
 
-    def download(self, url: str, line_number: int = 0, custom_name: str | None = None) -> DownloadResult:
-        """
-        Downloads a single URL. Returns a DownloadResult with full metadata.
-        
-        Handles:
-        - Duplicate detection (skips if already downloaded)
-        - Retry with exponential backoff
-        - WinError 32 file lock recovery
-        - Graceful error capture for every failure type
-        """
-        start_time = time.time()
+    # ─────────────────────────────────────────────────────────────────────
+    #  Probe
+    # ─────────────────────────────────────────────────────────────────────
 
-        # ── Step 1: Probe the URL for metadata (title, ID) ──
-        probe_opts = {
+    def _probe(self, url: str) -> dict | None:
+        """
+        Probe a URL for metadata without downloading.
+
+        Handles retries with exponential backoff for transient errors.
+        Returns the info dict on success, or None on failure.
+        """
+        probe_opts: dict = {
             "extract_flat": False,
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
-            # Use curl_cffi for probing as well
             "impersonate": ImpersonateTarget(client="chrome"),
         }
         if config.cookies_from_browser:
@@ -178,47 +155,140 @@ class YtDlpBackend:
         elif config.cookies_file:
             probe_opts["cookiefile"] = config.cookies_file
 
-        title = None
-        video_id = None
-        probe_success = False
-        last_probe_error = None
-
+        last_error = None
         for attempt in range(1, config.max_retries + 1):
             try:
                 with yt_dlp.YoutubeDL(probe_opts) as ydl:
                     info = ydl.extract_info(url, download=False)
                     if info:
-                        title = info.get("title", "Unknown")
-                        video_id = info.get("id")
-                probe_success = True
-                break
+                        return info
             except yt_dlp.utils.UnsupportedError:
-                elapsed = time.time() - start_time
                 logger.error(f"Unsupported URL (yt-dlp has no extractor for this site): {url}")
-                return DownloadResult(
-                    url=url, success=False, error="Unsupported URL",
-                    duration_seconds=elapsed, line_number=line_number
-                )
+                return None
             except yt_dlp.utils.DownloadError as e:
-                last_probe_error = str(e).split("\n")[0]  # First line only
+                last_error = str(e).split("\n")[0]
                 if attempt < config.max_retries:
                     wait = 2 ** attempt
-                    logger.warning(f"Probe attempt {attempt} failed: {last_probe_error}. Retrying in {wait}s...")
+                    logger.warning(f"Probe attempt {attempt} failed: {last_error}. Retrying in {wait}s...")
                     time.sleep(wait)
             except Exception as e:
-                last_probe_error = str(e)
+                last_error = str(e)
                 if attempt < config.max_retries:
                     wait = 2 ** attempt
-                    logger.warning(f"Probe attempt {attempt} failed unexpectedly: {last_probe_error}. Retrying in {wait}s...")
+                    logger.warning(f"Probe attempt {attempt} failed unexpectedly: {last_error}. Retrying in {wait}s...")
                     time.sleep(wait)
 
-        if not probe_success:
-            elapsed = time.time() - start_time
-            logger.error(f"Cannot access URL after {config.max_retries} probe attempts: {last_probe_error}")
-            return DownloadResult(
-                url=url, success=False, error=last_probe_error,
-                duration_seconds=elapsed, line_number=line_number
+        logger.error(f"Cannot access URL after {config.max_retries} probe attempts: {last_error}")
+        return None
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Main entry point
+    # ─────────────────────────────────────────────────────────────────────
+
+    def download(
+        self,
+        url: str,
+        line_number: int = 0,
+        custom_name: str | None = None,
+    ) -> list[DownloadResult]:
+        """
+        Download a URL — may produce one result (single video) or many (playlist).
+
+        Handles:
+        - Playlist detection & per-entry processing
+        - Duplicate detection (skips if already downloaded)
+        - Retry with exponential backoff
+        - WinError 32 file lock recovery
+        - Graceful error capture for every failure type
+        """
+        # ── Step 1: Probe ──
+        info = self._probe(url)
+        if info is None:
+            return [DownloadResult(
+                url=url, success=False, error="Failed to access URL",
+                line_number=line_number,
+            )]
+
+        # ── Step 2: Check for playlist ──
+        if "entries" in info:
+            return self._download_playlist(url, info, line_number)
+
+        # ── Step 3: Single video ──
+        return [self._download_single(url, info, line_number, custom_name)]
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Playlist download
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _download_playlist(
+        self,
+        playlist_url: str,
+        playlist_info: dict,
+        line_number: int,
+    ) -> list[DownloadResult]:
+        """Download every entry in a playlist, returning one result per video."""
+        entries = [e for e in (playlist_info.get("entries") or []) if e]
+        playlist_title = playlist_info.get("title", "Untitled")
+
+        if not entries:
+            logger.warning(f"\U0001f4c2 Playlist '{playlist_title}' is empty — nothing to download.")
+            return []
+
+        logger.info(
+            f"\U0001f4c2 Detected playlist: {playlist_title} "
+            f"({len(entries)} video{'s' if len(entries) != 1 else ''})"
+        )
+        logger.info(f"   Playlist URL: {playlist_url}")
+
+        results: list[DownloadResult] = []
+        for i, entry in enumerate(entries, start=1):
+            entry_url = entry.get("webpage_url") or entry.get("url")
+            entry_title = entry.get("title", "Unknown")
+
+            if not entry_url:
+                logger.warning(f"  [{i}/{len(entries)}] Skipping '{entry_title}' — no URL available")
+                continue
+
+            logger.info(f"  [{i}/{len(entries)}] Playlist entry: {entry_title}")
+            result = self._download_single(entry_url, entry, line_number, custom_name=None)
+            results.append(result)
+
+        # ── Playlist summary ──
+        succeeded = sum(1 for r in results if r.success)
+        failed = len(results) - succeeded
+        if failed:
+            logger.warning(
+                f"\U0001f4c2 Playlist '{playlist_title}': "
+                f"{succeeded}/{len(results)} downloaded ({failed} failed)"
             )
+        else:
+            logger.info(
+                f"\U0001f4c2 Playlist '{playlist_title}': "
+                f"all {succeeded} video{'s' if succeeded != 1 else ''} downloaded successfully"
+            )
+
+        return results
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Single video download
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _download_single(
+        self,
+        url: str,
+        info: dict,
+        line_number: int = 0,
+        custom_name: str | None = None,
+    ) -> DownloadResult:
+        """
+        Download a single video using pre-probed metadata.
+
+        This is the inner download loop for one video — shared by
+        both the single-video path and the playlist-entry path.
+        """
+        start_time = time.time()
+        title = info.get("title", "Unknown")
+        video_id = info.get("id")
 
         # ── Step 2: Check for duplicates ──
         existing = self._check_already_downloaded(video_id)
@@ -229,7 +299,7 @@ class YtDlpBackend:
                 url=url, success=True, file_path=existing,
                 title=title, skipped=True,
                 duration_seconds=elapsed, line_number=line_number,
-                file_size_bytes=existing.stat().st_size
+                file_size_bytes=existing.stat().st_size,
             )
 
         # ── Step 3: Build output template ──
@@ -238,7 +308,6 @@ class YtDlpBackend:
         if video_id:
             template = str(config.downloads_dir / f"{safe_title} [{video_id}].%(ext)s")
         else:
-            # For sites without a clean video ID, use title + extractor
             template = str(config.downloads_dir / f"{safe_title}.%(ext)s")
 
         # ── Step 4: Download with retries ──
@@ -253,13 +322,13 @@ class YtDlpBackend:
                 )
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=True)
+                    dl_info = ydl.extract_info(url, download=True)
 
-                    if not info:
+                    if not dl_info:
                         raise RuntimeError("yt-dlp returned no info after download")
 
                     # Find the actual downloaded file path
-                    final_path = self._resolve_downloaded_path(info, video_id, safe_title)
+                    final_path = self._resolve_downloaded_path(dl_info, video_id, safe_title)
 
                     if final_path and final_path.exists():
                         elapsed = time.time() - start_time
@@ -268,7 +337,7 @@ class YtDlpBackend:
                         return DownloadResult(
                             url=url, success=True, file_path=final_path,
                             title=final_title, duration_seconds=elapsed,
-                            file_size_bytes=fsize, line_number=line_number
+                            file_size_bytes=fsize, line_number=line_number,
                         )
                     else:
                         raise RuntimeError("Download completed but file not found on disk")
@@ -280,7 +349,6 @@ class YtDlpBackend:
                 if "WinError 32" in last_error and attempt < config.max_retries:
                     wait = 2 ** attempt
                     logger.warning(f"File locked (WinError 32), retrying in {wait}s...")
-                    # Reset progress hooks for clean retry
                     ydl_opts["progress_hooks"] = [TqdmProgressHook()]
                     time.sleep(wait)
                     continue
@@ -302,8 +370,12 @@ class YtDlpBackend:
         return DownloadResult(
             url=url, success=False, error=last_error,
             title=final_title, duration_seconds=elapsed,
-            line_number=line_number
+            line_number=line_number,
         )
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  File path resolution helpers
+    # ─────────────────────────────────────────────────────────────────────
 
     def _resolve_downloaded_path(
         self, info: dict, video_id: str | None, safe_title: str

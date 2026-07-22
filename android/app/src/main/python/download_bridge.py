@@ -119,11 +119,18 @@ def build_ydl_opts(url, output_template, format_string, cookies_file=None,
             raise RuntimeError("Download cancelled by user")
 
         # Per-Job Check
-        job_state = PythonBridge.getJobState(url)
-        if job_state == "PAUSED":
-            raise PauseException("Download paused by user")
-        if job_state == "STOPPED":
-            raise StopException("Download stopped and removed by user")
+        while True:
+            job_state = PythonBridge.getJobState(url)
+            if job_state == "PAUSED":
+                # BLOCK instead of crashing: Keep yt-dlp alive but idle.
+                # This avoids corrupting yt-dlp's internal state and keeps
+                # .part files in a clean, resumable state.
+                time.sleep(0.5)
+                continue  # Re-check state
+            if job_state == "STOPPED":
+                raise StopException("Download stopped and removed by user")
+            # RUNNING or any other state → continue normally
+            break
 
         if progress_listener is None:
             return
@@ -341,6 +348,21 @@ def get_playlist_info(url, cookies_file=None):
         return json.dumps({"success": False, "error": clean_error_message(str(e))})
 
 
+# ── Part-file cleanup helper ────────────────────────────────────────────────
+
+def _cleanup_part_files(video_id, output_dir):
+    """Remove .part and .ytdl temp files for a given video_id."""
+    if not video_id:
+        return
+    try:
+        for f in Path(output_dir).glob("*{}*.part*".format(video_id)):
+            f.unlink(missing_ok=True)
+        for f in Path(output_dir).glob("*{}*.ytdl*".format(video_id)):
+            f.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
 # ── Main download function (called from Kotlin via Chaquopy) ─────────────────
 
 def download_url(url, output_dir, highest_res, audio_only,
@@ -398,12 +420,15 @@ def download_url(url, output_dir, highest_res, audio_only,
     title = probe_result.get("title", "Unknown")
     video_id = probe_result.get("video_id")
 
-    # ── Step 2: Check for duplicates (same logic as desktop) ──
+    # ── Step 2: Check for duplicates (skip .part/.ytdl to allow resume) ──
     if video_id:
         downloads_path = Path(output_dir)
         if downloads_path.exists():
             for f in downloads_path.iterdir():
-                if f.is_file() and "[{}]".format(video_id) in f.name:
+                if (f.is_file()
+                        and ".part" not in f.name
+                        and ".ytdl" not in f.name
+                        and "[{}]".format(video_id) in f.name):
                     elapsed = time.time() - start_time
                     return json.dumps({
                         "url": url,
@@ -462,6 +487,30 @@ def download_url(url, output_dir, highest_res, audio_only,
     last_error = None
 
     for attempt in range(1, max_retries + 1):
+        # ── Pre-download state check ──
+        # Check for pause/stop BEFORE starting yt-dlp so the signal is
+        # picked up even if yt-dlp hasn't started yet (or between retries).
+        job_state = PythonBridge.getJobState(url)
+        if job_state == "PAUSED":
+            # If paused before download started, treat as paused immediately
+            return json.dumps({
+                "url": url,
+                "success": False,
+                "error": "Paused",
+                "paused": True,
+                "duration_seconds": time.time() - start_time,
+            })
+        if job_state == "STOPPED":
+            _cleanup_part_files(video_id, output_dir)
+            PythonBridge.removeJobState(url)
+            return json.dumps({
+                "url": url,
+                "success": False,
+                "error": "Stopped",
+                "stopped": True,
+                "duration_seconds": time.time() - start_time,
+            })
+
         try:
             # Rebuild opts each attempt for clean progress hooks
             ydl_opts = build_ydl_opts(
@@ -516,12 +565,7 @@ def download_url(url, output_dir, highest_res, audio_only,
 
         except StopException:
             # Cleanup part files and exit
-            try:
-                # Basic cleanup: look for files containing video_id and ending in .part
-                if video_id:
-                    for f in Path(output_dir).glob("*{}*.part*".format(video_id)):
-                        f.unlink(missing_ok=True)
-            except: pass
+            _cleanup_part_files(video_id, output_dir)
             PythonBridge.removeJobState(url)
             return json.dumps({
                 "url": url,

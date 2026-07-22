@@ -4,6 +4,7 @@ import android.content.Context
 import com.universaldownloader.data.model.DownloadSessionState
 import com.universaldownloader.engine.DownloadEngine
 import com.universaldownloader.engine.LinkParser
+import com.universaldownloader.engine.PythonBridge
 import com.universaldownloader.util.FileUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collectLatest
@@ -147,8 +148,40 @@ class DownloadRepository(
         engine.cancel()
     }
 
+    /**
+     * Pause a single download job.
+     * Immediately updates the UI state so the user sees the pause button response.
+     * The Python side detects this state change and blocks in the progress_hook.
+     */
+    fun pauseDownload(url: String) {
+        PythonBridge.setJobState(url, PythonBridge.JobState.PAUSED)
+        engine.setDownloadPaused(url)
+    }
+
+    /**
+     * Resume a single paused download.
+     * Updates the UI state back to DOWNLOADING *before* Python's blocked
+     * progress_hook unblocks, so the transition is seamless.
+     */
+    fun resumeDownload(url: String) {
+        PythonBridge.setJobState(url, PythonBridge.JobState.RUNNING)
+        engine.setDownloadRunning(url)
+    }
+
+    /**
+     * Stop (cancel) a single download job.
+     * Removes it from the UI immediately and signals Python to abort.
+     */
+    fun stopSingleDownload(url: String) {
+        PythonBridge.setJobState(url, PythonBridge.JobState.STOPPED)
+        engine.removeDownload(url)
+    }
+
     /** Check if a download session is currently running. */
     fun isRunning(): Boolean = engine.isRunning()
+
+    /** Check if a specific URL has an active yt-dlp call in progress. */
+    fun isDownloadActive(url: String): Boolean = engine.isUrlActive(url)
 
     /** Clear the log panel. */
     fun clearLogs() {

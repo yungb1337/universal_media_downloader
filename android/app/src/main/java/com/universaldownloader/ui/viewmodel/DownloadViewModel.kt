@@ -295,43 +295,52 @@ class DownloadViewModel(
     }
 
     fun pauseJob(url: String) {
-        PythonBridge.setJobState(url, PythonBridge.JobState.PAUSED)
+        downloadRepository.pauseDownload(url)
     }
 
     fun stopJob(url: String) {
-        PythonBridge.setJobState(url, PythonBridge.JobState.STOPPED)
+        downloadRepository.stopSingleDownload(url)
     }
 
     fun resumeJob(url: String, settings: DownloadSettings) {
-        // To resume, we re-enqueue the job for this specific URL.
-        // It will automatically pick up where it left off because of .part files.
+        // 1. Immediately unblock Python (if alive) and update UI to DOWNLOADING
+        downloadRepository.resumeDownload(url)
+
+        // 2. If Python has already returned (Scenario B: pre-download pause,
+        //    or the original worker was killed), start a fresh download via WorkManager.
         viewModelScope.launch {
-            val currentProgress = sessionState.value.currentProgress[url]
-            val isAudio = currentProgress?.isAudioOnly ?: settings.audioOnly
-            val formatId = currentProgress?.formatId ?: "auto"
-            
-            val formatsMap = mapOf(url to formatId)
-            val formatsJson = org.json.JSONObject(formatsMap).toString()
+            // Small delay to let state propagate
+            kotlinx.coroutines.delay(500)
 
-            val data = androidx.work.Data.Builder()
-                .putString("links_text", url)
-                .putString("formats_json", formatsJson)
-                .putBoolean("force_audio", isAudio)
-                .build()
+            // Check if the Python call is still active
+            if (!downloadRepository.isDownloadActive(url)) {
+                // Python has already returned → start a new download
+                val currentProgress = sessionState.value.currentProgress[url]
+                val isAudio = currentProgress?.isAudioOnly ?: settings.audioOnly
+                val formatId = currentProgress?.formatId ?: "auto"
 
-            val downloadRequest = androidx.work.OneTimeWorkRequestBuilder<com.universaldownloader.service.DownloadWorker>()
-                .setInputData(data)
-                .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-                .build()
+                val formatsMap = mapOf(url to formatId)
+                val formatsJson = org.json.JSONObject(formatsMap).toString()
 
-            // Use Unique Work with APPEND to keep it organized
-            androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
-                "resume_${url.hashCode()}",
-                androidx.work.ExistingWorkPolicy.REPLACE,
-                downloadRequest
-            )
-            
-            PythonBridge.setJobState(url, PythonBridge.JobState.RUNNING)
+                val data = androidx.work.Data.Builder()
+                    .putString("links_text", url)
+                    .putString("formats_json", formatsJson)
+                    .putBoolean("force_audio", isAudio)
+                    .build()
+
+                val downloadRequest = androidx.work.OneTimeWorkRequestBuilder<com.universaldownloader.service.DownloadWorker>()
+                    .setInputData(data)
+                    .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                    .build()
+
+                androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
+                    "resume_${url.hashCode()}",
+                    androidx.work.ExistingWorkPolicy.REPLACE,
+                    downloadRequest
+                )
+            }
+            // If Python IS still active, it unblocks from the state change above
+            // and yt-dlp continues downloading normally.
         }
     }
 

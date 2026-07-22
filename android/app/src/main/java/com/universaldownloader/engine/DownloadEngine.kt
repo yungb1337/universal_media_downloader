@@ -41,6 +41,15 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
 
     private val activeJobCount = AtomicInteger(0)
 
+    /** Tracks which URLs currently have an active Python call running. */
+    private val activeUrlJobs = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * True if the given URL has a live yt-dlp call in progress
+     * (hasn't returned from Python yet — e.g., blocked in progress_hook for pause).
+     */
+    fun isUrlActive(url: String): Boolean = url in activeUrlJobs
+
     fun isRunning(): Boolean = activeJobCount.get() > 0
 
     /**
@@ -107,6 +116,43 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
         PythonBridge.setCancelGlobal(true)
         _sessionState.update { it.copy(isRunning = false) }
         addLog("⏹  Global stop signal sent.", LogTag.WARNING)
+    }
+
+    /**
+     * Immediately mark a single download's progress as PAUSED in the UI.
+     * Called from the ViewModel when the user clicks pause, before Python
+     * actually blocks in the progress_hook. This makes the UI responsive.
+     */
+    fun setDownloadPaused(url: String) {
+        _sessionState.update { state ->
+            val progress = state.currentProgress[url] ?: return@update state
+            state.copy(
+                currentProgress = state.currentProgress + (url to progress.copy(status = DownloadStatus.PAUSED))
+            )
+        }
+    }
+
+    /**
+     * Immediately mark a single download's progress as RUNNING/DOWNLOADING again.
+     * Called from the ViewModel when the user resumes a paused download.
+     */
+    fun setDownloadRunning(url: String) {
+        _sessionState.update { state ->
+            val progress = state.currentProgress[url] ?: return@update state
+            state.copy(
+                currentProgress = state.currentProgress + (url to progress.copy(status = DownloadStatus.DOWNLOADING))
+            )
+        }
+    }
+
+    /**
+     * Immediately remove a single download from the progress map.
+     * Called from the ViewModel when the user stops a download.
+     */
+    fun removeDownload(url: String) {
+        _sessionState.update { state ->
+            state.copy(currentProgress = state.currentProgress - url)
+        }
     }
 
     /** Clear log entries. */
@@ -189,14 +235,17 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
             val progress = DownloadProgress(
                 url = link.url,
                 filename = existing?.filename ?: link.customName ?: "Preparing...",
+                downloadedBytes = existing?.downloadedBytes ?: 0,
+                totalBytes = existing?.totalBytes ?: 0,
                 status = DownloadStatus.DOWNLOADING,
                 isAudioOnly = effectiveAudioOnly,
-                formatId = formatId
+                formatId = existing?.formatId ?: formatId
             )
             state.copy(currentProgress = state.currentProgress + (link.url to progress))
         }
 
         return try {
+            activeUrlJobs.add(link.url)
             pythonBridge.downloadUrl(
                 url = link.url,
                 outputDir = settings.downloadDir,
@@ -213,6 +262,7 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
                 }
             ).copy(lineNumber = link.lineNumber)
         } catch (e: CancellationException) {
+            activeUrlJobs.remove(link.url)
             throw e
         } catch (e: Exception) {
             DownloadResult(
@@ -222,14 +272,17 @@ class DownloadEngine(private val pythonBridge: PythonBridge) {
                 lineNumber = link.lineNumber
             )
         }.also { result ->
+            activeUrlJobs.remove(link.url)
             val isPaused = result.isPaused
             val isStopped = result.isStopped
 
             if (isPaused) {
                 _sessionState.update { state ->
                     val currentProgress = state.currentProgress[link.url]
-                    // RACE CONDITION GUARD: Only set to PAUSED if it hasn't been RESUMED (Downloading) already
-                    if (currentProgress != null && currentProgress.status != DownloadStatus.DOWNLOADING) {
+                    // Set progress to PAUSED so the UI shows the correct state.
+                    // With the blocking-pause approach this code is reached when
+                    // the pause signal was picked up BEFORE yt-dlp started (pre-download check).
+                    if (currentProgress != null) {
                         state.copy(
                             currentProgress = state.currentProgress + (link.url to currentProgress.copy(status = DownloadStatus.PAUSED))
                         )

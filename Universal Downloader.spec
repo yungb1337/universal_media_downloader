@@ -11,11 +11,19 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=datas,
-    hiddenimports=['yt_dlp.extractor', 'yt_dlp.networking', 'yt_dlp.networking.impersonate', 'curl_cffi', 'curl_cffi.requests', 'dotenv'],
+    hiddenimports=[
+        # yt-dlp dynamic imports
+        'yt_dlp.extractor',
+        'yt_dlp.networking',
+        'yt_dlp.networking.common',
+        'yt_dlp.networking.impersonate',
+        'curl_cffi',
+        'dotenv',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['matplotlib', 'numpy', 'pandas'],
+    excludes=['matplotlib', 'numpy', 'pandas', 'tkinter.test'],
     noarchive=False,
     optimize=0,
 )

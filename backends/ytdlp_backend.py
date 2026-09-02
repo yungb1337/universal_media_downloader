@@ -74,7 +74,10 @@ class YtDlpBackend:
         defines a fallback chain that yt-dlp walks through automatically.
         """
         if config.audio_only:
-            return "bestaudio/best"
+            # REMOVED /best fallback: previously "bestaudio/best" would silently
+            # fall back to a video file if audio-only format wasn't available.
+            # Now we explicitly DENY video — user asked for audio-only.
+            return "bestaudio"
 
         if config.highest_res:
             return "bestvideo+bestaudio/best"

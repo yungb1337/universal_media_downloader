@@ -225,11 +225,25 @@ class App(ctk.CTk):
         self._audio_only_btn.set(env.get("DOWNLOAD_AUDIO_ONLY", "NO").upper() in ("YES", "TRUE", "1"))
 
     def _save_env(self):
-        """Write current form values back to .env."""
+        """Write current form values back to .env (paths stored relative to BASE_DIR for portability)."""
+        def relativize(path_str: str) -> str:
+            """Convert an absolute path to relative (against BASE_DIR) if possible."""
+            if not path_str:
+                return ""
+            p = Path(path_str)
+            if not p.is_absolute():
+                return path_str  # already relative
+            try:
+                rel = p.relative_to(BASE_DIR)
+                return "./" + str(rel.as_posix())
+            except ValueError:
+                # Path is outside BASE_DIR — keep absolute
+                return path_str
+
         write_env_file(ENV_FILE, {
-            "LINKS_FILE":              self._links_entry.get() or "./links.txt",
-            "DOWNLOAD_DIR":            self._dl_dir_entry.get() or "./downloads",
-            "COOKIES_FILE":            self._cookies_entry.get(),
+            "LINKS_FILE":              relativize(self._links_entry.get()) or "./links.txt",
+            "DOWNLOAD_DIR":            relativize(self._dl_dir_entry.get()) or "./downloads",
+            "COOKIES_FILE":            relativize(self._cookies_entry.get()),
             "MAX_CONCURRENT_DOWNLOADS": self._max_concurrent.get().strip() or "1",
             "MAX_RETRIES":             self._max_retries.get().strip() or "5",
             "HIGHEST_RES":             "YES" if self._highest_res_btn.get() else "NO",

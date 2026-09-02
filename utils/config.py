@@ -7,9 +7,9 @@ from dotenv import load_dotenv
 from utils.helpers import find_base_dir
 
 
-# Load .env from project root
+# Load .env from project root (override=True so .env always wins)
 _base_dir = find_base_dir()
-load_dotenv(_base_dir / ".env")
+load_dotenv(_base_dir / ".env", override=True)
 
 
 class Config:

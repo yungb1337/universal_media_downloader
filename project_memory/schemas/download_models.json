@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "UniversalDownloaderAndroidModels",
+  "definitions": {
+    "DownloadRequest": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "url": { "type": "string" },
+        "customTitle": { "type": ["string", "null"] },
+        "isAudioOnly": { "type": "boolean" },
+        "audioFormat": { "type": "string", "enum": ["mp3", "m4a", "flac", "opus"] },
+        "audioQuality": { "type": "string", "enum": ["320", "256", "192", "128"] },
+        "maxVideoHeight": { "type": ["integer", "null"] },
+        "destinationUri": { "type": "string" }
+      },
+      "required": ["id", "url", "isAudioOnly"]
+    },
+    "ProgressEvent": {
+      "type": "object",
+      "properties": {
+        "downloadId": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "PROBING", "DOWNLOADING", "POST_PROCESSING", "COMPLETED", "FAILED", "PAUSED"] },
+        "downloadedBytes": { "type": "integer" },
+        "totalBytes": { "type": ["integer", "null"] },
+        "speedBytesPerSec": { "type": "number" },
+        "etaSeconds": { "type": ["integer", "null"] },
+        "progressFraction": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "currentFilename": { "type": "string" }
+      },
+      "required": ["downloadId", "status", "progressFraction"]
+    },
+    "EngineStatus": {
+      "type": "object",
+      "properties": {
+        "ytdlpVersion": { "type": "string" },
+        "latestAvailableVersion": { "type": "string" },
+        "isUpdateAvailable": { "type": "boolean" },
+        "quickJsAvailable": { "type": "boolean" },
+        "remoteEjsEnabled": { "type": "boolean" },
+        "lastCheckedTimestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ytdlpVersion", "quickJsAvailable"]
+    }
+  }
+}

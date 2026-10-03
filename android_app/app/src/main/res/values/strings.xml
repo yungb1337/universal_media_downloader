@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Universal Downloader</string>
+    <string name="download_channel_name">Active Downloads</string>
+    <string name="download_channel_desc">Shows ongoing media download progress and speed</string>
+</resources>

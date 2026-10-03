@@ -5,7 +5,7 @@ __pycache__/
 
 # C extensions
 *.so
-
+.downloads
 # Distribution / packaging
 .Python
 build/
@@ -64,3 +64,6 @@ logs/
 # User local testing files
 links.txt
 cookies.txt
+
+# Autonomous agent run checkpoints (optional - remove to track run history)
+checkpoints/

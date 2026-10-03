@@ -10,7 +10,7 @@ from tqdm import tqdm
 from core.models import DownloadResult
 from utils.config import config
 from utils.logger import logger
-from utils.helpers import sanitize_filename, extract_video_id
+from utils.helpers import sanitize_filename, extract_video_id, clean_youtube_url
 
 
 class TqdmProgressHook:
@@ -104,6 +104,9 @@ class YtDlpBackend:
             "writethumbnail": False,
             "windowsfilenames": True,
             "impersonate": ImpersonateTarget(client="chrome"),
+            "js_runtimes": {"node": {}, "deno": {}, "bun": {}, "quickjs": {}},
+            "remote_components": ["ejs:github"],
+            "noplaylist": True,
             "retries": 10,
             "fragment_retries": 10,
         }
@@ -147,11 +150,14 @@ class YtDlpBackend:
         Returns the info dict on success, or None on failure.
         """
         probe_opts: dict = {
-            "extract_flat": False,
+            "extract_flat": "in_playlist",
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
             "impersonate": ImpersonateTarget(client="chrome"),
+            "js_runtimes": {"node": {}, "deno": {}, "bun": {}, "quickjs": {}},
+            "remote_components": ["ejs:github"],
+            "noplaylist": True,
         }
         if config.cookies_from_browser:
             probe_opts["cookiesfrombrowser"] = (config.cookies_from_browser,)
@@ -198,14 +204,17 @@ class YtDlpBackend:
         Download a URL — may produce one result (single video) or many (playlist).
 
         Handles:
+        - URL sanitization (stripping radio/mix query parameters)
         - Playlist detection & per-entry processing
         - Duplicate detection (skips if already downloaded)
         - Retry with exponential backoff
         - WinError 32 file lock recovery
         - Graceful error capture for every failure type
         """
+        target_url = clean_youtube_url(url)
+
         # ── Step 1: Probe ──
-        info = self._probe(url)
+        info = self._probe(target_url)
         if info is None:
             return [DownloadResult(
                 url=url, success=False, error="Failed to access URL",
@@ -214,10 +223,10 @@ class YtDlpBackend:
 
         # ── Step 2: Check for playlist ──
         if "entries" in info:
-            return self._download_playlist(url, info, line_number)
+            return self._download_playlist(target_url, info, line_number)
 
         # ── Step 3: Single video ──
-        return [self._download_single(url, info, line_number, custom_name)]
+        return [self._download_single(target_url, info, line_number, custom_name)]
 
     # ─────────────────────────────────────────────────────────────────────
     #  Playlist download
@@ -234,11 +243,11 @@ class YtDlpBackend:
         playlist_title = playlist_info.get("title", "Untitled")
 
         if not entries:
-            logger.warning(f"\U0001f4c2 Playlist '{playlist_title}' is empty — nothing to download.")
+            logger.warning(f"📁 Playlist '{playlist_title}' is empty — nothing to download.")
             return []
 
         logger.info(
-            f"\U0001f4c2 Detected playlist: {playlist_title} "
+            f"📁 Detected playlist: {playlist_title} "
             f"({len(entries)} video{'s' if len(entries) != 1 else ''})"
         )
         logger.info(f"   Playlist URL: {playlist_url}")
@@ -246,6 +255,8 @@ class YtDlpBackend:
         results: list[DownloadResult] = []
         for i, entry in enumerate(entries, start=1):
             entry_url = entry.get("webpage_url") or entry.get("url")
+            if not entry_url and entry.get("id"):
+                entry_url = f"https://www.youtube.com/watch?v={entry.get('id')}"
             entry_title = entry.get("title", "Unknown")
 
             if not entry_url:

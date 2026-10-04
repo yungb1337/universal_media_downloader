@@ -65,5 +65,13 @@ logs/
 links.txt
 cookies.txt
 
+# Android build and local files
+.gradle/
+**/local.properties
+**/.cxx/
+**/captures/
+*.apk
+*.aab
+
 # Autonomous agent run checkpoints (optional - remove to track run history)
 checkpoints/
